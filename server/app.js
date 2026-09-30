@@ -14,10 +14,12 @@ const ROUTES = [
   ['POST', '/api/ventas', ['ventas', 'ventaItems', 'clientes'], c => routes.createVenta(c.state, c.body), 201],
   ['PUT', '/api/ventas/:id', ['ventas', 'ventaItems', 'clientes'], c => routes.updateVenta(c.state, c.params.id, c.body)],
   ['PATCH', '/api/ventas/:id/cobro', ['ventas'], c => routes.setCobro(c.state, c.params.id, c.body)],
+  ['POST', '/api/ventas/:id/a-otro-ingreso', ['ventas', 'otrosIngresos'], c => routes.ventaAOtroIngreso(c.state, c.params.id, c.body)],
   ['DELETE', '/api/ventas/:id', ['ventas', 'ventaItems'], c => routes.deleteVenta(c.state, c.params.id)],
 
   ['POST', '/api/gastos', ['gastos', 'compraItems', 'insumos'], c => routes.createGasto(c.state, c.body), 201],
   ['PUT', '/api/gastos/:id', ['gastos', 'compraItems', 'insumos'], c => routes.updateGasto(c.state, c.params.id, c.body)],
+  ['PATCH', '/api/gastos/:id/pago', ['gastos'], c => routes.setPagoGasto(c.state, c.params.id, c.body)],
   ['DELETE', '/api/gastos/:id', ['gastos', 'compraItems'], c => routes.deleteGasto(c.state, c.params.id)],
 
   ['POST', '/api/producciones', ['producciones'], c => routes.createProduccion(c.state, c.body), 201],
@@ -50,6 +52,7 @@ const ROUTES = [
   ['DELETE', '/api/familias/:tipo/:nombre', ['familias'], c => routes.deleteFamilia(c.state, c.params.tipo, c.params.nombre)],
 
   ['POST', '/api/clientes', ['clientes'], c => routes.createCliente(c.state, c.body), 201],
+  ['POST', '/api/clientes/:id/unir', ['clientes', 'ventas'], c => routes.unirClientes(c.state, c.params.id, c.body)],
   ['PUT', '/api/clientes/:id', ['clientes'], c => routes.updateCliente(c.state, c.params.id, c.body)],
   ['DELETE', '/api/clientes/:id', ['clientes'], c => routes.deleteCliente(c.state, c.params.id)],
 

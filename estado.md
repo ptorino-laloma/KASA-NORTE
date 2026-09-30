@@ -100,12 +100,28 @@ sin productos (solo monto) no descuenta stock.
   tenía compras por insumo, así que el stock de insumos arranca con un conteo.
 - Editar un egreso no vuelve a tocar precios salvo que se tilde la casilla.
 
-### 3.7 Migración automática
+### 3.7 "Para mirar" (alertas automáticas, `Calc.alertas`)
+Se recalculan con cada cambio. Urgentes: cobros pendientes (con "marcar cobrada"),
+pagos a realizar (con "marcar pagado"), productos por quedarse sin stock (stock ≤ 0
+con ventas recientes, o que alcanza para menos de 7 días al ritmo de los últimos
+30, o bajo el mínimo), insumos para reponer (solo los que ya tienen compra con
+detalle o conteo) y productos activos sin ventas hace 30+ días. Aparte, plegado,
+"Datos para completar o revisar". Constantes en `calc.js` (DIAS_SIN_VENTA,
+DIAS_COBERTURA, VENTANA_RITMO).
+
+### 3.8 Clientes repetidos y ventas que no eran ventas
+- `Calc.clientesParecidos`: mismas palabras en otro orden, escritura casi igual,
+  mismo nombre con apellido parecido, o nombre incompleto. No marca parientes.
+  En Datos maestros → Clientes: "Dejar «X»" une (las ventas pasan a X) o "No son la
+  misma" (se recuerda en ese dispositivo).
+- Ventas sin productos tienen "A otros ingresos" (ej. devolución de un préstamo).
+
+### 3.9 Migración automática
 Al abrir la app (GET /api/state) con la base vacía (sin insumos, productos,
 producciones, ventas, egresos, clientes ni otros ingresos) se importan solas las
 pestañas viejas y se guarda todo. Si no existen, no hace nada. Ya no hay botón.
 
-### 3.8 Ingreso
+### 3.10 Ingreso
 Un solo usuario: `APP_USUARIO` (default "kasa") + `APP_CLAVE`, cookie firmada de
 60 días. En Vercel `APP_CLAVE` y `SESSION_SECRET` son obligatorias (el repo es
 público; un secreto por defecto permitiría fabricar cookies). Un login fallido

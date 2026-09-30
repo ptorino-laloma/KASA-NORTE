@@ -231,6 +231,129 @@
     return { costo, venta, gananciaPotencial: ventaConCosto - costo };
   }
 
+  /* ---------- alertas automáticas ("Para mirar") ---------- */
+
+  const DIAS_SIN_VENTA = 30;      // un producto activo que se vendía y hace esto que no se vende
+  const DIAS_COBERTURA = 7;       // avisar si el stock alcanza para menos de esto, al ritmo de venta
+  const VENTANA_RITMO = 30;       // días que se miran para calcular el ritmo de venta / consumo
+  const diasEntre = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+
+  // Todo sale de los datos cargados y se recalcula con cada cambio. hoy = 'YYYY-MM-DD'.
+  function alertas(state, hoy) {
+    const idx = indices(state);
+    const st = stock(state), sti = stockInsumos(state);
+    const desde = isoMasDias(hoy, -(VENTANA_RITMO - 1));
+    const fechaVenta = new Map(state.ventas.map(v => [v.id, v.fecha]));
+
+    // cobros y pagos pendientes, del más viejo al más nuevo
+    const cobros = state.ventas.filter(v => v.estadoPago === 'pendiente')
+      .map(v => ({ ventaId: v.id, fecha: v.fecha, clienteId: v.clienteId, monto: v.total, dias: diasEntre(v.fecha, hoy) }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const pagos = state.gastos.filter(g => g.estadoPago === 'pendiente')
+      .map(g => ({ gastoId: g.id, fecha: g.fecha, categoria: g.categoria, proveedor: g.proveedor, monto: g.monto, dias: diasEntre(g.fecha, hoy) }))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+    // ritmo de venta por producto (últimos VENTANA_RITMO días) y última venta
+    const vendido30 = new Map(), ultimaVenta = new Map();
+    state.ventaItems.forEach(i => {
+      const f = fechaVenta.get(i.ventaId);
+      if (f === undefined || f > hoy) return;
+      if (f >= desde) vendido30.set(i.productoId, (vendido30.get(i.productoId) || 0) + i.cantidad);
+      if (!ultimaVenta.has(i.productoId) || f > ultimaVenta.get(i.productoId)) ultimaVenta.set(i.productoId, f);
+    });
+    const stockBajo = [];
+    state.productos.filter(p => p.activo).forEach(p => {
+      const s = st.get(p.id).stock;
+      const diario = (vendido30.get(p.id) || 0) / VENTANA_RITMO;
+      const cobertura = diario > 0 ? s / diario : null;
+      const bajoMin = p.stockMinimo !== null && p.stockMinimo !== undefined && s < p.stockMinimo;
+      if (s <= 0 && diario > 0) stockBajo.push({ productoId: p.id, stock: s, dias: 0, motivo: s < 0 ? 'negativo' : 'sin stock' });
+      else if ((cobertura !== null && cobertura < DIAS_COBERTURA) || bajoMin) {
+        stockBajo.push({ productoId: p.id, stock: s, dias: cobertura === null ? null : Math.floor(cobertura), motivo: bajoMin ? 'bajo el mínimo' : 'se agota pronto' });
+      }
+    });
+    stockBajo.sort((a, b) => (a.dias ?? 999) - (b.dias ?? 999));
+
+    // insumos: mínimo y ritmo de consumo de la producción
+    const consumo30 = new Map();
+    state.producciones.forEach(p => {
+      if (p.fecha < desde || p.fecha > hoy || !p.consumo) return;
+      p.consumo.forEach(c => consumo30.set(c.insumoId, (consumo30.get(c.insumoId) || 0) + c.cantidad));
+    });
+    const insumosBajos = [];
+    state.insumos.filter(i => i.familia !== 'Mano de obra y servicios').forEach(i => {
+      const s = sti.get(i.id);
+      const diario = (consumo30.get(i.id) || 0) / VENTANA_RITMO;
+      // Solo insumos con una base real (una compra con detalle o un conteo): antes de
+      // eso el stock es solo lo consumido en negativo y no significa nada.
+      const tieneMovimiento = s.comprado > 0 || s.ajustado !== 0;
+      const bajoMin = i.stockMinimo !== null && i.stockMinimo !== undefined && s.stock < i.stockMinimo;
+      const cobertura = diario > 0 ? s.stock / diario : null;
+      if (tieneMovimiento && (bajoMin || (cobertura !== null && cobertura < DIAS_COBERTURA))) {
+        insumosBajos.push({ insumoId: i.id, stock: s.stock, dias: cobertura === null ? null : Math.max(0, Math.floor(cobertura)), motivo: bajoMin ? 'bajo el mínimo' : 'se agota pronto' });
+      }
+    });
+
+    // productos activos que se vendían y hace DIAS_SIN_VENTA que no se venden
+    const sinVenta = state.productos.filter(p => p.activo && ultimaVenta.has(p.id))
+      .map(p => ({ productoId: p.id, ultima: ultimaVenta.get(p.id), dias: diasEntre(ultimaVenta.get(p.id), hoy), stock: st.get(p.id).stock }))
+      .filter(x => x.dias >= DIAS_SIN_VENTA)
+      .sort((a, b) => b.dias - a.dias);
+
+    // datos a completar (no son urgentes, pero afectan los números)
+    const costos = costosTodos(state);
+    const activos = state.productos.filter(p => p.activo);
+    const datos = {
+      sinCosto: activos.filter(p => costos.get(p.id).costoUnit === null).map(p => p.id),
+      sinPrecio: activos.filter(p => !(p.precio > 0)).map(p => p.id),
+      aPerdida: activos.filter(p => p.precio > 0 && costos.get(p.id).costoUnit !== null && costos.get(p.id).costoUnit >= p.precio).map(p => p.id),
+      insumosSinFamilia: state.insumos.filter(i => !i.familia).map(i => i.id),
+      stockNegativo: state.productos.filter(p => st.get(p.id).stock < 0).map(p => p.id)
+    };
+    return {
+      cobros, totalCobros: sum(cobros, x => x.monto),
+      pagos, totalPagos: sum(pagos, x => x.monto),
+      stockBajo, insumosBajos, sinVenta, datos,
+      reglas: { DIAS_SIN_VENTA, DIAS_COBERTURA, VENTANA_RITMO }
+    };
+  }
+
+  /* ---------- clientes parecidos (posibles repetidos) ---------- */
+
+  function normTxt(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function parecido(a, b) {          // 1 − distancia de Levenshtein / largo mayor
+    const m = a.length, n = b.length;
+    if (!m || !n) return 0;
+    let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      const cur = [i];
+      for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return 1 - prev[n] / Math.max(m, n);
+  }
+  // Pares de clientes que podrían ser la misma persona. Solo criterios fuertes:
+  // mismas palabras en otro orden, nombre casi igual (typo) o un nombre suelto que
+  // coincide con el primer nombre del otro ("Clari" / "Clari Doval").
+  // No marca parientes con el mismo apellido.
+  function clientesParecidos(state) {
+    const cs = state.clientes.map(c => ({ c, n: normTxt(c.nombre), w: normTxt(c.nombre).split(' ') }));
+    const out = [];
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      const a = cs[i], b = cs[j];
+      let motivo = null;
+      if (a.n === b.n || a.w.slice().sort().join(' ') === b.w.slice().sort().join(' ')) motivo = 'mismas palabras';
+      else if (parecido(a.n, b.n) >= (Math.min(a.n.length, b.n.length) >= 5 ? 0.8 : 0.75) && Math.min(a.n.length, b.n.length) >= 3) motivo = 'casi igual';
+      // mismo nombre y apellido parecido ("Pablo Rolotti" / "Pablo Rotolli")
+      else if (a.w.length === 2 && b.w.length === 2 && a.w[0] === b.w[0] && a.w[1].length >= 5 && parecido(a.w[1], b.w[1]) >= 0.55) motivo = 'casi igual';
+      // nombre cortado ("Celmi" / "Celmira")
+      else if (a.w.length === 1 && b.w.length === 1 && Math.min(a.n.length, b.n.length) >= 4 && (a.n.startsWith(b.n) || b.n.startsWith(a.n))) motivo = 'nombre incompleto';
+      else if ((a.w.length === 1 && b.w.length > 1 && b.w.includes(a.w[0])) || (b.w.length === 1 && a.w.length > 1 && a.w.includes(b.w[0]))) motivo = 'nombre incompleto';
+      if (motivo) out.push({ a: a.c.id, b: b.c.id, motivo });
+    }
+    return out;
+  }
+
   /* ---------- resultados ---------- */
 
   function grupoDe(state, categoria) {
@@ -453,7 +576,7 @@
 
   const api = {
     sum, round2, byId, groupBy, indices, rangoMes, rangoAnio, enRango, finMes, sumarMeses, rangoAnterior, rangoAnioAnterior,
-    ventasFilas, agrupar, costosProduccion, tendencia, familiaSugerida, consumoDe, stockInsumos, valorStock,
+    ventasFilas, agrupar, costosProduccion, tendencia, familiaSugerida, consumoDe, stockInsumos, valorStock, alertas, clientesParecidos,
     costoProducto, costosTodos, precioSugerido, margen, productosQueUsan,
     stock, grupoDe, resumen, porProducto, porCliente, porMes
   };

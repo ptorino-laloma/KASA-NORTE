@@ -241,6 +241,60 @@ test('valor del stock a costo y a precio de venta', () => {
   assert.equal(v.gananciaPotencial, 194000);
 });
 
+test('clientes parecidos y unir', () => {
+  const { s, pid } = escenario();
+  ['Portis Cristina', 'Cristina Portis', 'Tomi Juarez', 'Tomy Juarez', 'Clari', 'Clari Doval', 'Leti Bello', 'Javi Bello', 'Pablo Rolotti', 'Pablo Rotolli', 'Celmira', 'Celmi', 'Caro Aliaga', 'Caro Arzubi'].forEach(n => routes.createCliente(s, { nombre: n }));
+  const id = n => s.clientes.find(c => c.nombre === n).id;
+  const pares = Calc.clientesParecidos(s).map(p => [s.clientes.find(c => c.id === p.a).nombre, s.clientes.find(c => c.id === p.b).nombre, p.motivo].join('|'));
+  assert.ok(pares.includes('Portis Cristina|Cristina Portis|mismas palabras'));
+  assert.ok(pares.includes('Tomi Juarez|Tomy Juarez|casi igual'));
+  assert.ok(pares.includes('Clari|Clari Doval|nombre incompleto'));
+  assert.ok(pares.includes('Pablo Rolotti|Pablo Rotolli|casi igual'));
+  assert.ok(pares.includes('Celmira|Celmi|nombre incompleto'));
+  assert.ok(!pares.some(p => p.startsWith('Leti Bello|Javi Bello')));   // parientes: no
+  assert.ok(!pares.some(p => p.startsWith('Caro Aliaga|Caro Arzubi')));  // mismo nombre, otra persona
+  routes.createVenta(s, { fecha: '2026-09-02', clienteId: id('Clari'), items: [{ productoId: pid, cantidad: 1, precioUnit: 1 }] });
+  const r = routes.unirClientes(s, id('Clari'), { destinoId: id('Clari Doval') });
+  assert.equal(r.ventasMovidas, 1);
+  assert.equal(s.ventas[0].clienteId, id('Clari Doval'));
+  assert.ok(!s.clientes.some(c => c.nombre === 'Clari'));
+});
+
+test('venta sin productos pasa a otros ingresos', () => {
+  const { s, pid } = escenario();
+  s.ventas.push({ id: 'v1', fecha: '2026-06-12', clienteId: null, total: 100000, estadoPago: 'pagado', medioPago: 'Transferencia', nota: 'prestamo', creado: '' });
+  routes.ventaAOtroIngreso(s, 'v1', { concepto: 'Devolución de préstamo' });
+  assert.equal(s.ventas.length, 0);
+  assert.equal(s.otrosIngresos[0].monto, 100000);
+  assert.equal(Calc.resumen(s, Calc.rangoMes('2026-06')).resultadoFinal, 100000);
+  routes.createVenta(s, { fecha: '2026-09-02', items: [{ productoId: pid, cantidad: 1, precioUnit: 1 }] });
+  assert.throws(() => routes.ventaAOtroIngreso(s, s.ventas[0].id, { concepto: 'x' }), /tiene productos/);
+});
+
+test('alertas automáticas: cobros, pagos, stock por agotarse, sin ventas', () => {
+  const { s, pid } = escenario();
+  routes.createProducto(s, { nombre: 'Tarta', categoria: 'Empanadas', precio: 1 });
+  const tarta = s.productos[1].id;
+  routes.createProduccion(s, { fecha: '2026-09-01', productoId: pid, cantidad: 5 });
+  // 30 docenas vendidas en 30 días = 1 por día; quedan 5 - 3 = 2 → se agota en ~2 días
+  routes.createVenta(s, { fecha: '2026-09-10', estadoPago: 'pendiente', items: [{ productoId: pid, cantidad: 3, precioUnit: 25000 }] });
+  s.ventaItems[0].cantidad = 3; // stock 2
+  routes.createVenta(s, { fecha: '2026-09-11', items: [{ productoId: pid, cantidad: 27, precioUnit: 1 }] });
+  routes.createProduccion(s, { fecha: '2026-09-12', productoId: pid, cantidad: 27 });
+  routes.createVenta(s, { fecha: '2026-07-01', items: [{ productoId: tarta, cantidad: 1, precioUnit: 1 }] });
+  routes.createGasto(s, { fecha: '2026-09-15', categoria: 'Varios', monto: 500, estadoPago: 'pendiente' });
+  const a = Calc.alertas(s, '2026-09-30');
+  assert.equal(a.cobros.length, 1);
+  assert.equal(a.totalCobros, 75000);
+  assert.equal(a.cobros[0].dias, 20);
+  assert.equal(a.pagos.length, 1);
+  const bajo = a.stockBajo.find(x => x.productoId === pid);
+  assert.ok(bajo && bajo.dias === 2, JSON.stringify(a.stockBajo));
+  const sv = a.sinVenta.find(x => x.productoId === tarta);
+  assert.ok(sv && sv.dias === 91);
+  assert.ok(!a.sinVenta.some(x => x.productoId === pid));
+});
+
 // Planilla de ejemplo con la misma forma que las pestañas reales (datos inventados).
 const serial = iso => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000 + 25569);
 function planillaEjemplo() {

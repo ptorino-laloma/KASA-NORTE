@@ -36,7 +36,8 @@ function fmtC(n) {
 }
 function fmtQ(n) {
   if (n === null || n === undefined) return '—';
-  return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  const r = Math.round(Number(n) * 100) / 100;
+  return (r === 0 ? 0 : r).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 }
 function pct(x) {
   if (x === null || x === undefined || !Number.isFinite(x)) return '—';
@@ -402,7 +403,7 @@ RENDER.ingresos = function () {
       <td class="amt num">${fmt(v.total)}</td>
       <td><button class="chip ${v.estadoPago === 'pagado' ? 'ok' : 'pend'}" data-cobro="${v.id}" title="Cambiar estado">${v.estadoPago === 'pagado' ? 'Cobrada' : 'Pendiente'}</button>
         ${v.medioPago ? `<div class="hint">${esc(v.medioPago)}</div>` : ''}</td>
-      <td class="amt"><button class="btn ghost small" data-editv="${v.id}">Editar</button><button class="btn ghost small" data-borrarv="${v.id}">Borrar</button></td>
+      <td class="amt">${(C.idx.itemsPorVenta.get(v.id) || []).length ? `<button class="btn ghost small" data-editv="${v.id}">Editar</button>` : `<button class="btn ghost small" data-aoi="${v.id}" title="Para lo que no fue una venta (préstamo, aporte…)">A otros ingresos</button>`}<button class="btn ghost small" data-borrarv="${v.id}">Borrar</button></td>
     </tr>`).join('');
   $('ventas-empty').style.display = list.length ? 'none' : '';
   $('ventas-empty').textContent = soloPend ? 'No hay ventas pendientes de cobro.' : 'No hay ventas en este mes.';
@@ -711,8 +712,8 @@ function renderPanelResumen(r, rc) {
   $('rs-kpis').innerHTML =
     kpi('Ventas', fmt(a.ventasTotal), `${a.cantVentas} ventas · ${delta(a.ventasTotal, b.ventasTotal, true)}`) +
     kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
-    kpi('Resultado', fmt(a.resultadoFinal), delta(a.resultadoFinal, b.resultadoFinal, true), a.resultadoFinal < 0 ? 'bad' : 'good') +
-    kpi('Margen de lo vendido', pct(a.margenTeorico), a.ingresoConCosto ? `según receta, sobre ${fmt(a.ingresoConCosto)} · ${delta(a.margenTeorico, b.margenTeorico, true, true)}` : 'sin ventas con productos') +
+    kpi('Resultado (plata real)', fmt(a.resultadoFinal), `ventas − todos los egresos · ${delta(a.resultadoFinal, b.resultadoFinal, true)}`, a.resultadoFinal < 0 ? 'bad' : 'good') +
+    kpi('Margen de lo vendido', pct(a.margenTeorico), a.ingresoConCosto ? `cuánto deja cada venta según la receta · ${delta(a.margenTeorico, b.margenTeorico, true, true)}` : 'sin ventas con productos') +
     kpi('Venta promedio', fmt(a.ticketPromedio), `por venta · ${delta(a.ticketPromedio, b.ticketPromedio, true)}`) +
     kpi('Por cobrar', fmt(pendTotal), 'todas las fechas', pendTotal > 0 ? 'warn' : '') +
     kpi('Stock a precio de venta', fmt(vs.venta), `cuesta ${fmt(vs.costo)} · dejaría ${fmt(vs.gananciaPotencial)}`);
@@ -727,28 +728,7 @@ function renderPanelResumen(r, rc) {
       <button class="btn secondary small" id="migracion-ok" style="margin-top:10px;">Entendido</button></div>`;
   })() : '';
 
-  const alertas = [];
-  const st = id => (C.stock.get(id) || { stock: 0 }).stock;
-  const lista = arr => arr.slice(0, 6).map(p => esc(p.nombre)).join(', ') + (arr.length > 6 ? '…' : '');
-  const negativos = S.productos.filter(p => st(p.id) < 0);
-  if (negativos.length) alertas.push(['bad', `${negativos.length} producto${negativos.length === 1 ? '' : 's'} con stock negativo (se vendió más de lo que figura producido). <button class="link" data-goto="stock">Ver stock</button>`]);
-  const bajos = S.productos.filter(p => p.activo && p.stockMinimo !== null && st(p.id) >= 0 && st(p.id) < p.stockMinimo);
-  if (bajos.length) alertas.push(['', `Productos bajo el mínimo: ${lista(bajos)}.`]);
-  const insBajos = S.insumos.filter(i => i.familia !== FAMILIA_SIN_STOCK && i.stockMinimo !== null && i.stockMinimo !== undefined && C.stockIns.get(i.id).stock < i.stockMinimo);
-  if (insBajos.length) alertas.push(['', `Insumos para reponer (bajo el mínimo): ${lista(insBajos)}. <button class="link" data-goto="stock" data-st="insumos">Ver</button>`]);
-  const sinCosto = S.productos.filter(p => p.activo && costoU(p.id) === null);
-  if (sinCosto.length) alertas.push(['', `${sinCosto.length} producto${sinCosto.length === 1 ? '' : 's'} sin costo (falta receta o rinde): ${lista(sinCosto)}. <button class="link" data-goto="recetario">Ir al recetario</button>`]);
-  const sinPrecio = S.productos.filter(p => p.activo && !(p.precio > 0));
-  if (sinPrecio.length) alertas.push(['', `Sin precio de venta: ${lista(sinPrecio)}. <button class="link" data-goto="maestros">Datos maestros</button>`]);
-  const perdida = S.productos.filter(p => p.activo && p.precio > 0 && costoU(p.id) !== null && costoU(p.id) >= p.precio);
-  if (perdida.length) alertas.push(['bad', `Precio por debajo del costo: ${perdida.map(p => esc(p.nombre)).join(', ')}.`]);
-  const sinFamIns = S.insumos.filter(i => !i.familia).length;
-  if (sinFamIns) alertas.push(['', `${sinFamIns} insumos sin familia. <button class="link" data-goto="maestros" data-dm="insumos">Asignar</button>`]);
-  if (a.ventasSinDetalle > 0) alertas.push(['', `${fmt(a.ventasSinDetalle)} de ventas del período no tienen productos cargados: no descuentan stock ni entran en el margen.`]);
-  const gPend = Calc.sum(S.gastos.filter(g => g.estadoPago === 'pendiente'), g => g.monto);
-  if (gPend > 0) alertas.push(['', `Egresos a pagar: ${fmt(gPend)}.`]);
-  if (!S.compraItems.length) alertas.push(['', 'Para tener stock de insumos, cargá las compras con <b>detalle de compra</b> en Egresos y hacé un conteo inicial. <button class="link" data-goto="stock" data-st="insumos">Stock de insumos</button>']);
-  $('rs-alertas').innerHTML = alertas.length ? alertas.map(([cls, t]) => `<div class="alert ${cls}">${t}</div>`).join('') : '<div class="empty">Todo en orden.</div>';
+  renderParaMirar(a);
 
   const top = Calc.porProducto(S, r).slice(0, 8);
   const max = Math.max(1, ...top.map(t => t.ingresos));
@@ -756,6 +736,51 @@ function renderPanelResumen(r, rc) {
     top.map(t => `<tr><td>${esc(prodNombre(t.productoId))}</td><td class="amt num">${fmtQ(t.cantidad)}</td><td class="amt num">${fmt(t.ingresos)}</td>
       <td class="hide-sm" style="width:30%"><span class="bar" style="width:${Math.round(t.ingresos / max * 100)}%"></span></td><td class="amt num">${pct(t.margen)}</td></tr>`).join('') + '</tbody>' : '';
   $('rs-top-empty').style.display = top.length ? 'none' : '';
+}
+
+// "Para mirar": alertas automáticas calculadas en calc.js (Calc.alertas) con cada cambio.
+let verTodoSinVenta = false;
+function renderParaMirar(resumenPeriodo) {
+  const A = Calc.alertas(S, hoy());
+  const R = A.reglas;
+  const nomP = id => esc(prodNombre(id));
+  const nomI = id => esc((C.idx.insumos.get(id) || {}).nombre || '(borrado)');
+  const uni = id => esc((C.idx.productos.get(id) || {}).unidad || '');
+  const hace = d => d === 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`;
+  const bloques = [];
+  const bloque = (titulo, cls, cuerpo) => bloques.push(`<div class="alert ${cls}"><b>${titulo}</b>${cuerpo}</div>`);
+  const lista = (items, max, fn) => `<ul style="margin:6px 0 0; padding-left:18px;">${items.slice(0, max).map(x => `<li>${fn(x)}</li>`).join('')}</ul>` +
+    (items.length > max ? `<div class="hint">y ${items.length - max} más</div>` : '');
+
+  if (A.cobros.length) bloque(`Cobros pendientes: ${fmt(A.totalCobros)}`, A.cobros.some(c => c.dias > 15) ? 'bad' : '',
+    lista(A.cobros, 6, c => `${esc(cliNombre(c.clienteId) || 'Sin cliente')} · ${fmt(c.monto)} · ${hace(c.dias)} <button class="chip pend" data-cobro="${c.ventaId}">Marcar cobrada</button>`));
+  if (A.pagos.length) bloque(`Pagos a realizar: ${fmt(A.totalPagos)}`, '',
+    lista(A.pagos, 6, g => `${esc(g.categoria)}${g.proveedor ? ' · ' + esc(g.proveedor) : ''} · ${fmt(g.monto)} · ${hace(g.dias)} <button class="chip pend" data-pagar="${g.gastoId}">Marcar pagado</button>`));
+  if (A.stockBajo.length) bloque('Productos por quedarse sin stock', 'bad',
+    lista(A.stockBajo, 8, x => `${nomP(x.productoId)}: ${x.motivo === 'negativo' ? 'stock negativo (hacé un conteo)' : x.motivo === 'sin stock' ? 'sin stock' : `quedan ${fmtQ(x.stock)} ${uni(x.productoId)}` + (x.dias !== null ? `, alcanza para ~${x.dias} día${x.dias === 1 ? '' : 's'}` : '') + (x.motivo === 'bajo el mínimo' ? ' (bajo el mínimo)' : '')}`) +
+    `<div class="hint">Según lo vendido en los últimos ${R.VENTANA_RITMO} días; avisa si alcanza para menos de ${R.DIAS_COBERTURA}.</div>`);
+  if (A.insumosBajos.length) bloque('Insumos para reponer', '',
+    lista(A.insumosBajos, 8, x => { const i = C.idx.insumos.get(x.insumoId) || {}; return `${nomI(x.insumoId)}: quedan ${fmtQ(x.stock)} ${esc(i.unidad || '')}` + (x.dias !== null ? `, alcanza para ~${x.dias} días` : '') + (x.motivo === 'bajo el mínimo' ? ' (bajo el mínimo)' : ''); }) +
+    ' <button class="link" data-goto="stock" data-st="insumos">Ver stock de insumos</button>');
+  if (A.sinVenta.length) bloque(`Sin ventas hace más de ${R.DIAS_SIN_VENTA} días (${A.sinVenta.length})`, '',
+    lista(A.sinVenta, verTodoSinVenta ? 999 : 6, x => `${nomP(x.productoId)}: última venta ${hace(x.dias)}${x.stock > 0 ? ` · hay ${fmtQ(x.stock)} ${uni(x.productoId)} en stock` : ''}`) +
+    (A.sinVenta.length > 6 ? ` <button class="link" id="ver-sin-venta">${verTodoSinVenta ? 'Ver menos' : 'Ver todos'}</button>` : '') +
+    '<div class="hint">Solo cuenta ventas cargadas con productos.</div>');
+
+  const D = A.datos, datos = [];
+  const nombres = ids => ids.slice(0, 6).map(nomP).join(', ') + (ids.length > 6 ? '…' : '');
+  if (D.stockNegativo.length) datos.push(`${D.stockNegativo.length} productos con stock negativo: se vendió más de lo producido cargado. <button class="link" data-goto="stock">Hacer un conteo</button>`);
+  if (D.sinCosto.length) datos.push(`Sin costo (falta receta o rinde): ${nombres(D.sinCosto)}. <button class="link" data-goto="recetario">Recetario</button>`);
+  if (D.sinPrecio.length) datos.push(`Sin precio de venta: ${nombres(D.sinPrecio)}. <button class="link" data-goto="maestros">Datos maestros</button>`);
+  if (D.aPerdida.length) datos.push(`<span class="bad">Precio por debajo del costo: ${nombres(D.aPerdida)}.</span>`);
+  if (D.insumosSinFamilia.length) datos.push(`${D.insumosSinFamilia.length} insumos sin familia. <button class="link" data-goto="maestros" data-dm="insumos">Asignar</button>`);
+  if (resumenPeriodo.ventasSinDetalle > 0) datos.push(`${fmt(resumenPeriodo.ventasSinDetalle)} de ventas del período sin productos cargados: no descuentan stock ni entran en el margen.`);
+  const dup = Calc.clientesParecidos(S).filter(p => !paresIgnorados().has(p.a + '|' + p.b)).length;
+  if (dup) datos.push(`${dup} posibles clientes repetidos. <button class="link" data-goto="maestros" data-dm="clientes">Revisar</button>`);
+  if (!S.compraItems.length) datos.push('Para tener stock de insumos, cargá las compras con <b>detalle de compra</b> en Egresos y hacé un conteo inicial.');
+
+  $('rs-alertas').innerHTML = (bloques.length ? bloques.join('') : '<div class="empty">Nada urgente: no hay cobros ni pagos pendientes ni stock por agotarse.</div>') +
+    (datos.length ? `<details style="margin-top:10px;"><summary><b>Datos para completar o revisar</b> (${datos.length})</summary><ul style="padding-left:18px;">${datos.map(d => `<li style="margin:4px 0;">${d}</li>`).join('')}</ul></details>` : '');
 }
 
 const CLAVES_VENTA = { producto: 'Producto', familia: 'Familia', cliente: 'Cliente', tipoCliente: 'Tipo de cliente', mes: 'Mes' };
@@ -1224,7 +1249,34 @@ async function guardarCliente() {
   toast('Cliente guardado.');
   resetClienteForm();
 }
+// Pares marcados como "no son la misma persona" (se recuerdan en este dispositivo).
+function paresIgnorados() {
+  try { return new Set(JSON.parse(localStorage.getItem('kasa-no-repetidos') || '[]')); } catch { return new Set(); }
+}
+function ignorarPar(key) {
+  const s = paresIgnorados(); s.add(key);
+  try { localStorage.setItem('kasa-no-repetidos', JSON.stringify([...s])); } catch { /* sin storage */ }
+}
+function renderRepetidos() {
+  const ign = paresIgnorados();
+  const pares = Calc.clientesParecidos(S).filter(p => !ign.has(p.a + '|' + p.b));
+  $('rep-panel').style.display = pares.length ? '' : 'none';
+  if (!pares.length) return;
+  const stats = new Map(Calc.porCliente(S).map(x => [x.clienteId, x]));
+  const info = id => { const x = stats.get(id); return x ? `${x.cantVentas} venta${x.cantVentas === 1 ? '' : 's'}, ${fmt(x.total)}, última ${fDate(x.ultima)}` : 'sin ventas'; };
+  const MOT = { 'mismas palabras': 'mismas palabras en otro orden', 'casi igual': 'escritura casi igual', 'nombre incompleto': 'un nombre incompleto' };
+  $('rep-txt').textContent = `${pares.length} pares que podrían ser la misma persona. Unir pasa todas las ventas al que elijas y borra el otro. Revisá antes: pueden ser personas distintas con el mismo nombre.`;
+  $('tbl-rep').innerHTML = pares.map(p => `<tr><td>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+      <div><b>${esc(cliNombre(p.a))}</b><div class="hint">${info(p.a)}</div></div>
+      <div><b>${esc(cliNombre(p.b))}</b><div class="hint">${info(p.b)}</div></div>
+      <div class="hint" style="align-self:center;">${MOT[p.motivo] || p.motivo}</div>
+    </div>
+    <div class="actions" style="margin-top:6px;"><button class="btn secondary small" data-unir="${p.b}|${p.a}">Dejar «${esc(cliNombre(p.a))}»</button><button class="btn secondary small" data-unir="${p.a}|${p.b}">Dejar «${esc(cliNombre(p.b))}»</button><button class="btn ghost small" data-norep="${p.a}|${p.b}">No son la misma</button></div>
+  </td></tr>`).join('');
+}
 function renderMClientes() {
+  renderRepetidos();
   const q = $('c-buscar').value.trim().toLowerCase();
   const stats = new Map(Calc.porCliente(S).map(x => [x.clienteId, x]));
   const list = S.clientes.filter(c => !q || c.nombre.toLowerCase().includes(q))
@@ -1271,6 +1323,24 @@ document.addEventListener('click', async e => {
   if (d.tab) return showTab(d.tab);
   if (d.goto) { if (d.dm) dmVista = d.dm; if (d.st) stVista = d.st; return showTab(d.goto); }
   if (t.id === 'migracion-ok') { migracionInfo = null; return render(); }
+  if (t.id === 'ver-sin-venta') { verTodoSinVenta = !verTodoSinVenta; return render(); }
+  if (d.pagar) { const g = S.gastos.find(x => x.id === d.pagar); if (g) await api('PATCH', `/api/gastos/${g.id}/pago`, { estadoPago: 'pagado' }).then(() => toast('Marcado como pagado.')).catch(() => {}); return; }
+  if (d.unir) {
+    const [origen, destino] = d.unir.split('|');
+    if (confirm(`¿Unir «${cliNombre(origen)}» en «${cliNombre(destino)}»? Las ventas de «${cliNombre(origen)}» pasan a «${cliNombre(destino)}» y «${cliNombre(origen)}» se borra.`)) {
+      const r = await api('POST', `/api/clientes/${origen}/unir`, { destinoId: destino }).catch(() => null);
+      if (r) toast(`Listo: ${r.ventasMovidas} venta${r.ventasMovidas === 1 ? '' : 's'} movida${r.ventasMovidas === 1 ? '' : 's'}.`);
+    }
+    return;
+  }
+  if (d.norep) { ignorarPar(d.norep); return render(); }
+  if (d.aoi) {
+    const v = S.ventas.find(x => x.id === d.aoi);
+    if (!v) return;
+    const concepto = prompt(`Pasar ${fmt(v.total)} del ${fDate(v.fecha)}${v.clienteId ? ' (' + cliNombre(v.clienteId) + ')' : ''} a otros ingresos.\nConcepto (ej: devolución de préstamo, aporte):`, v.nota && /prest/i.test(v.nota) ? 'Devolución de préstamo' : '');
+    if (concepto && concepto.trim()) await api('POST', `/api/ventas/${v.id}/a-otro-ingreso`, { concepto: concepto.trim() }).then(() => toast('Pasado a otros ingresos.')).catch(() => {});
+    return;
+  }
   if (d.vmes) { ventasMes = moverMes(ventasMes, Number(d.vmes)); $('ventas-pend').checked = false; return render(); }
   if (d.omes) { oiMes = moverMes(oiMes, Number(d.omes)); return render(); }
   if (d.gmes) { gastosMes = moverMes(gastosMes, Number(d.gmes)); return render(); }

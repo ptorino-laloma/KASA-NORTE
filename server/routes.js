@@ -113,6 +113,22 @@ function setCobro(state, id, body) {
   if (body.medioPago !== undefined) venta.medioPago = optMedio(body.medioPago);
 }
 
+// Algo cargado como venta que en realidad no lo fue (ej. la devolución de un préstamo):
+// pasa a "Otros ingresos" con la misma fecha, monto y medio. Solo ventas sin productos
+// (si tuviera productos, sacarla cambiaría el stock).
+function ventaAOtroIngreso(state, id, body) {
+  const v = find(state.ventas, id, 'la venta');
+  if (state.ventaItems.some(i => i.ventaId === id)) throw new ApiError(400, 'Esta venta tiene productos: no se puede pasar a otros ingresos.');
+  const cliente = v.clienteId ? (state.clientes.find(c => c.id === v.clienteId) || {}).nombre : null;
+  const o = {
+    id: uid(), fecha: v.fecha, concepto: reqText(body.concepto, 'el concepto', 80), monto: v.total, medioPago: v.medioPago,
+    nota: [cliente ? 'De: ' + cliente : null, v.nota, 'Estaba cargado como venta'].filter(Boolean).join(' · '), creado: now()
+  };
+  state.otrosIngresos.push(o);
+  remove(state.ventas, id, 'la venta');
+  return { id: o.id };
+}
+
 function deleteVenta(state, id) {
   remove(state.ventas, id, 'la venta');
   state.ventaItems = state.ventaItems.filter(i => i.ventaId !== id);
@@ -176,6 +192,10 @@ function updateGasto(state, id, body) {
   const items = parseCompra(state, body.items);
   Object.assign(g, datosGasto(state, { ...body, monto: items.length ? 1 : body.monto }));
   guardarCompra(state, g, items, body.actualizarPrecios === true);
+}
+
+function setPagoGasto(state, id, body) {
+  find(state.gastos, id, 'el gasto').estadoPago = oneOf(body.estadoPago, ESTADOS_PAGO, 'El estado de pago');
 }
 
 function deleteGasto(state, id) {
@@ -423,6 +443,20 @@ function deleteCliente(state, id) {
   remove(state.clientes, id, 'el cliente');
 }
 
+// Une un cliente repetido en otro: sus ventas pasan al destino y el repetido se borra.
+function unirClientes(state, id, body) {
+  const origen = find(state.clientes, id, 'el cliente a unir');
+  const destino = find(state.clientes, body.destinoId, 'el cliente destino');
+  if (origen.id === destino.id) throw new ApiError(400, 'Elegí dos clientes distintos.');
+  let n = 0;
+  state.ventas.forEach(v => { if (v.clienteId === origen.id) { v.clienteId = destino.id; n++; } });
+  if (!destino.telefono && origen.telefono) destino.telefono = origen.telefono;
+  if (origen.notas) destino.notas = [destino.notas, origen.notas].filter(Boolean).join(' · ');
+  if (origen.tipo === 'Mayorista') destino.tipo = 'Mayorista';
+  remove(state.clientes, origen.id, 'el cliente');
+  return { ventasMovidas: n };
+}
+
 /* ---------- categorías de gasto ---------- */
 
 function createCategoriaGasto(state, body) {
@@ -512,7 +546,7 @@ function deleteOtroIngreso(state, id) {
 module.exports = {
   MOTIVOS_AJUSTE, getState,
   createFamilia, updateFamilia, deleteFamilia, asignarFamiliasInsumos,
-  createAjusteInsumo, conteoInsumos, deleteAjusteInsumo,
+  createAjusteInsumo, conteoInsumos, deleteAjusteInsumo, unirClientes, ventaAOtroIngreso, setPagoGasto,
   createOtroIngreso, updateOtroIngreso, deleteOtroIngreso, updateReceta,
   createVenta, updateVenta, setCobro, deleteVenta,
   createGasto, updateGasto, deleteGasto,
