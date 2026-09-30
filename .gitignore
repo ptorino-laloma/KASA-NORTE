@@ -1,0 +1,11 @@
+node_modules/
+data/*.json
+data/*.tmp
+.env
+.vercel
+*.log
+# datos del negocio y claves de Google: nunca al repo (el repo es público)
+*.xlsx
+*.csv
+*.json.key
+__pycache__/

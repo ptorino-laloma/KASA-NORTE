@@ -1,0 +1,16 @@
+{
+  "name": "kasa-norte",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestión de Kasa Norte (comida casera): ventas, producción, stock automático, costeo por receta y estado de resultados. Datos en Google Sheets, deploy en Vercel.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node scripts/test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {}
+}

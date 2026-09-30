@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kasa Norte</title>
+<!-- PWA: instalable en el celular ("Agregar a pantalla de inicio") -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#5E2616">
+<link rel="icon" type="image/png" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kasa Norte">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F1EA;
+    --panel:#FFFDF9;
+    --ink:#2A2420;
+    --ink-soft:#7A6F63;
+    --line:rgba(42,36,32,.13);
+    --brand:#8C3B24;
+    --brand-dark:#5E2616;
+    --accent:#C98A2B;
+    --good:#3F6650;
+    --bad:#A33A2A;
+    --warn:#9A6A12;
+    --radius:7px;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif; font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; border-top:3px solid var(--accent);
+  }
+  .num{font-family:'IBM Plex Mono', monospace; font-variant-numeric:tabular-nums;}
+  header.top{
+    padding:18px 16px 12px; max-width:1080px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+  }
+  h1{font-family:'Fraunces', serif; font-weight:600; font-size:25px; margin:0; color:var(--brand-dark); letter-spacing:.2px;}
+  h1 small{font-family:'IBM Plex Sans',sans-serif; font-weight:400; font-size:12.5px; color:var(--ink-soft); margin-left:6px; letter-spacing:0;}
+  .link{background:none; border:none; padding:0; cursor:pointer; font-size:13px; color:var(--brand); text-decoration:underline; font-family:inherit;}
+  body:not(.logged-in) header.top .identity, body:not(.logged-in) nav.tabs, body:not(.logged-in) main{display:none;}
+  #login{display:none; max-width:380px; margin:50px auto; padding:0 16px;}
+  body:not(.logged-in) #login{display:block;}
+  #login .btn{width:100%; margin-top:6px;}
+  nav.tabs{
+    max-width:1080px; margin:0 auto; padding:0 16px; display:flex; gap:18px;
+    border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none;
+    position:sticky; top:0; background:var(--bg); z-index:5;
+  }
+  nav.tabs::-webkit-scrollbar{display:none;}
+  nav.tabs button{
+    background:none; border:none; cursor:pointer; font-family:inherit;
+    font-size:14px; color:var(--ink-soft); padding:12px 1px 10px; border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  nav.tabs button.active{color:var(--brand-dark); border-bottom-color:var(--accent); font-weight:600;}
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  main{max-width:1080px; margin:0 auto; padding:18px 16px 80px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 16px 18px; margin-bottom:16px;}
+  h2.section{font-family:'Fraunces', serif; font-size:18.5px; font-weight:600; margin:0 0 10px; color:var(--brand-dark);}
+  h3.sub{font-size:14px; font-weight:600; margin:14px 0 8px; color:var(--ink);}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px;}
+  .field{display:flex; flex-direction:column; gap:4px; flex:1; min-width:130px;}
+  .field.narrow{flex:0 1 120px; min-width:95px;}
+  .field.wide{flex:2; min-width:200px;}
+  .field label{font-size:12.5px; color:var(--ink-soft);}
+  input, select, textarea{
+    font-family:'IBM Plex Sans',sans-serif; font-size:15px; padding:8px 9px;
+    border:1px solid var(--line); border-radius:5px; background:#fff; color:var(--ink); width:100%;
+  }
+  input[type=number]{font-family:'IBM Plex Mono',monospace;}
+  textarea{resize:vertical; min-height:38px;}
+  .btn{
+    background:var(--brand); color:#fff; border:none; padding:9px 16px; border-radius:5px;
+    font-size:14px; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .btn:hover{background:var(--brand-dark);}
+  .btn.secondary{background:#fff; color:var(--brand-dark); border:1px solid var(--brand);}
+  .btn.small{padding:5px 10px; font-size:13px;}
+  .btn.ghost{background:none; color:var(--brand); padding:5px 8px;}
+  .btn.danger{background:#fff; color:var(--bad); border:1px solid var(--bad);}
+  .btn[disabled]{opacity:.45; cursor:not-allowed;}
+  .actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .seg{display:inline-flex; border:1px solid var(--brand); border-radius:5px; overflow:hidden;}
+  .seg button{background:#fff; border:none; padding:7px 13px; font-size:13.5px; cursor:pointer; color:var(--brand-dark); border-right:1px solid var(--brand); font-family:inherit;}
+  .seg button:last-child{border-right:none;}
+  .seg button.on{background:var(--brand); color:#fff;}
+  .table-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  table{width:100%; border-collapse:collapse; font-size:13.8px;}
+  th{text-align:left; font-weight:500; color:var(--ink-soft); font-size:11.8px; border-bottom:1px solid var(--line); padding:7px 8px; white-space:nowrap;}
+  td{padding:8px; border-bottom:1px solid var(--line); vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tr.total td{border-top:1.5px solid var(--ink); font-weight:600;}
+  tr.cat td{background:#F4EEE4; font-weight:600; font-size:12.5px; color:var(--brand-dark); padding:5px 8px;}
+  tr.click{cursor:pointer;}
+  tr.click:hover td{background:#FBF6EE;}
+  .amt{text-align:right; white-space:nowrap;}
+  .muted{color:var(--ink-soft);}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin:2px 0 0;}
+  .good{color:var(--good);}
+  .bad{color:var(--bad);}
+  .warn{color:var(--warn);}
+  .empty{color:var(--ink-soft); font-size:13.5px; padding:6px 2px;}
+  .chip{font-size:11.5px; padding:2px 8px; border-radius:20px; white-space:nowrap; display:inline-block; border:none; font-family:inherit;}
+  .chip.ok{background:#E3ECE5; color:var(--good);}
+  .chip.pend{background:#F6E1DA; color:var(--bad);}
+  .chip.warn{background:#F6ECD4; color:var(--warn);}
+  .chip.neutral{background:#EDE8E0; color:var(--ink-soft);}
+  button.chip{cursor:pointer;}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px;}
+  .kpi{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px;}
+  .kpi .label{font-size:12px; color:var(--ink-soft);}
+  .kpi .value{font-size:20px; margin-top:2px;}
+  .kpi .foot{font-size:11.8px; color:var(--ink-soft);}
+  .nav-mes{display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
+  .nav-mes input, .nav-mes select{width:auto;}
+  .alert{border-left:3px solid var(--accent); background:#FBF4E6; padding:8px 12px; border-radius:4px; margin:6px 0; font-size:13.5px;}
+  .alert.bad{border-left-color:var(--bad); background:#FBECE7;}
+  .items .item{display:grid; grid-template-columns:minmax(0,1fr) 90px 110px 34px; gap:8px; align-items:center; margin-bottom:8px;}
+  .items .item .sub{grid-column:1 / -1; font-size:12px; color:var(--ink-soft); margin-top:-4px;}
+  .receta .item{display:grid; grid-template-columns:minmax(0,1fr) 100px 110px 34px; gap:8px; align-items:center; margin-bottom:6px;}
+  .x{background:none; border:1px solid var(--line); border-radius:5px; height:36px; cursor:pointer; color:var(--bad); font-size:16px;}
+  .total-line{display:flex; justify-content:space-between; align-items:baseline; font-size:18px; margin:10px 0; padding-top:10px; border-top:1px dashed var(--line);}
+  .calc-box{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin:12px 0;}
+  .calc-box div{background:#fff; border:1px solid var(--line); border-radius:5px; padding:8px 10px;}
+  .calc-box .l{font-size:11.8px; color:var(--ink-soft);}
+  .calc-box .v{font-size:16px;}
+  .editing{border-color:var(--accent); box-shadow:0 0 0 2px rgba(201,138,43,.18);}
+  input.inline{width:110px; padding:5px 7px; font-size:14px;}
+  .bar{height:6px; border-radius:3px; background:var(--accent); display:inline-block; vertical-align:middle;}
+  #toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%); max-width:90vw;
+    background:var(--brand-dark); color:#fff; padding:10px 18px; border-radius:6px;
+    font-size:14px; opacity:0; pointer-events:none; transition:opacity .25s; z-index:20;
+  }
+  #toast.show{opacity:1;}
+  #toast.error{background:var(--bad);}
+  #loading{position:fixed; top:0; left:0; right:0; height:3px; background:var(--accent); transform-origin:left; animation:load 1s infinite; display:none; z-index:30;}
+  body.busy #loading{display:block;}
+  @keyframes load{0%{transform:scaleX(0)}50%{transform:scaleX(.7)}100%{transform:scaleX(1); opacity:0}}
+  @media (max-width:600px){
+    main{padding:14px 12px 80px;}
+    .panel{padding:14px 12px 16px;}
+    .field, .field.wide{min-width:100%;}
+    .field.narrow{flex:1 1 45%; min-width:0;}
+    .items .item{grid-template-columns:minmax(0,1fr) 70px 90px 34px;}
+    .receta .item{grid-template-columns:minmax(0,1fr) 80px 80px 34px;}
+    .hide-sm{display:none;}
+    h1{font-size:23px;}
+  }
+</style>
+</head>
+<body>
+<div id="loading"></div>
+
+<header class="top">
+  <h1>Kasa Norte <small id="hoy-label"></small></h1>
+  <div class="identity"><button class="link" id="logout">Salir</button></div>
+</header>
+
+<section id="login">
+  <div class="panel">
+    <h2 class="section">Ingresar</h2>
+    <div class="row"><div class="field"><label for="login-user">Usuario</label><input id="login-user" autocomplete="username"></div></div>
+    <div class="row"><div class="field"><label for="login-pass">Contraseña</label><input id="login-pass" type="password" autocomplete="current-password"></div></div>
+    <button class="btn" id="login-btn">Entrar</button>
+    <p class="hint bad" id="login-error" style="margin-top:10px;"></p>
+  </div>
+</section>
+
+<nav class="tabs">
+  <button data-tab="inicio">Inicio</button>
+  <button data-tab="vender">Ventas</button>
+  <button data-tab="gastos">Gastos</button>
+  <button data-tab="produccion">Producción</button>
+  <button data-tab="stock">Stock</button>
+  <button data-tab="costos">Costos</button>
+  <button data-tab="resultados">Resultados</button>
+  <button data-tab="clientes">Clientes</button>
+  <button data-tab="config">Configuración</button>
+</nav>
+
+<main>
+
+  <!-- INICIO -->
+  <section id="view-inicio" class="view">
+    <div class="panel">
+      <div class="nav-mes">
+        <button class="btn secondary small" data-mes="-1" aria-label="Mes anterior">◀</button>
+        <input type="month" id="inicio-mes">
+        <button class="btn secondary small" data-mes="1" aria-label="Mes siguiente">▶</button>
+      </div>
+      <div class="kpis" id="inicio-kpis"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn" data-goto="vender">+ Venta</button>
+        <button class="btn secondary" data-goto="gastos">+ Gasto</button>
+        <button class="btn secondary" data-goto="produccion">+ Producción</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Para mirar</h2>
+      <div id="inicio-alertas"></div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Lo más vendido del mes</h2>
+      <div class="table-wrap"><table id="inicio-top"></table></div>
+      <div class="empty" id="inicio-top-empty">No hay ventas con detalle de productos en este mes.</div>
+    </div>
+  </section>
+
+  <!-- VENTAS -->
+  <section id="view-vender" class="view">
+    <div class="panel" id="venta-panel">
+      <h2 class="section" id="venta-titulo">Nueva venta</h2>
+      <div class="row">
+        <div class="field narrow"><label for="v-fecha">Fecha</label><input type="date" id="v-fecha"></div>
+        <div class="field wide"><label for="v-cliente">Cliente</label><input id="v-cliente" list="dl-clientes" placeholder="Nombre (opcional)" autocomplete="off"></div>
+        <div class="field narrow" id="v-cliente-tipo-wrap" style="display:none;"><label for="v-cliente-tipo">Cliente nuevo</label>
+          <select id="v-cliente-tipo"><option>Particular</option><option>Mayorista</option></select></div>
+      </div>
+      <p class="hint" id="v-cliente-info"></p>
+      <h3 class="sub">Productos</h3>
+      <div class="items" id="v-items"></div>
+      <button class="btn ghost" id="v-add">+ Agregar producto</button>
+      <div class="total-line"><span>Total</span><strong class="num" id="v-total">$0</strong></div>
+      <div class="row">
+        <div class="field"><label>Cobro</label>
+          <div class="seg" id="v-estado"><button data-v="pagado" class="on">Cobrada</button><button data-v="pendiente">Pendiente</button></div></div>
+        <div class="field narrow"><label for="v-medio">Medio</label><select id="v-medio"></select></div>
+        <div class="field wide"><label for="v-nota">Nota</label><input id="v-nota" placeholder="Opcional"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="v-guardar">Guardar venta</button>
+        <button class="btn secondary" id="v-cancelar" style="display:none;">Cancelar edición</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Ventas</h2>
+      <div class="nav-mes">
+        <button class="btn secondary small" data-vmes="-1" aria-label="Mes anterior">◀</button>
+        <input type="month" id="ventas-mes">
+        <button class="btn secondary small" data-vmes="1" aria-label="Mes siguiente">▶</button>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ventas-pend" style="width:auto;"> Solo pendientes (todas las fechas)</label>
+      </div>
+      <p class="hint" id="ventas-resumen" style="margin-bottom:8px;"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Cliente</th><th>Detalle</th><th class="amt">Total</th><th>Cobro</th><th></th></tr></thead>
+        <tbody id="tbl-ventas"></tbody>
+      </table></div>
+      <div class="empty" id="ventas-empty">No hay ventas en este mes.</div>
+    </div>
+  </section>
+
+  <!-- GASTOS -->
+  <section id="view-gastos" class="view">
+    <div class="panel" id="gasto-panel">
+      <h2 class="section" id="gasto-titulo">Nuevo gasto</h2>
+      <div class="row">
+        <div class="field narrow"><label for="g-fecha">Fecha</label><input type="date" id="g-fecha"></div>
+        <div class="field"><label for="g-cat">Categoría</label><select id="g-cat"></select></div>
+        <div class="field narrow"><label for="g-monto">Monto</label><input type="number" id="g-monto" min="0" step="0.01" inputmode="decimal" placeholder="0"></div>
+      </div>
+      <div class="row">
+        <div class="field narrow"><label for="g-medio">Medio</label><select id="g-medio"></select></div>
+        <div class="field narrow"><label for="g-estado">Estado</label><select id="g-estado"><option value="pagado">Pagado</option><option value="pendiente">A pagar</option></select></div>
+        <div class="field"><label for="g-prov">Proveedor</label><input id="g-prov" list="dl-proveedores" placeholder="Opcional"></div>
+        <div class="field wide"><label for="g-nota">Detalle</label><input id="g-nota" placeholder="Ej: cebolla y tomate"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="g-guardar">Guardar gasto</button>
+        <button class="btn secondary" id="g-cancelar" style="display:none;">Cancelar edición</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Gastos</h2>
+      <div class="nav-mes">
+        <button class="btn secondary small" data-gmes="-1" aria-label="Mes anterior">◀</button>
+        <input type="month" id="gastos-mes">
+        <button class="btn secondary small" data-gmes="1" aria-label="Mes siguiente">▶</button>
+      </div>
+      <div id="gastos-cats" style="margin-bottom:10px;"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Categoría</th><th>Detalle</th><th class="amt">Monto</th><th></th></tr></thead>
+        <tbody id="tbl-gastos"></tbody>
+      </table></div>
+      <div class="empty" id="gastos-empty">No hay gastos en este mes.</div>
+    </div>
+  </section>
+
+  <!-- PRODUCCIÓN -->
+  <section id="view-produccion" class="view">
+    <div class="panel">
+      <h2 class="section">Registrar producción o compra para reventa</h2>
+      <div class="row">
+        <div class="field narrow"><label for="p-fecha">Fecha</label><input type="date" id="p-fecha"></div>
+        <div class="field wide"><label for="p-prod">Producto</label><select id="p-prod"></select></div>
+        <div class="field narrow"><label for="p-cant" id="p-cant-label">Cantidad</label><input type="number" id="p-cant" min="0" step="0.5" inputmode="decimal"></div>
+      </div>
+      <p class="hint" id="p-info"></p>
+      <div class="row"><div class="field"><label for="p-nota">Nota</label><input id="p-nota" placeholder="Opcional"></div></div>
+      <button class="btn" id="p-guardar">Guardar</button>
+    </div>
+    <div class="panel">
+      <h2 class="section">Producción</h2>
+      <div class="nav-mes">
+        <button class="btn secondary small" data-pmes="-1" aria-label="Mes anterior">◀</button>
+        <input type="month" id="prod-mes">
+        <button class="btn secondary small" data-pmes="1" aria-label="Mes siguiente">▶</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Producto</th><th class="amt">Cantidad</th><th class="amt">Costo unit.</th><th class="amt">Costo total</th><th></th></tr></thead>
+        <tbody id="tbl-prod"></tbody>
+      </table></div>
+      <div class="empty" id="prod-empty">No hay producción cargada en este mes.</div>
+    </div>
+  </section>
+
+  <!-- STOCK -->
+  <section id="view-stock" class="view">
+    <div class="panel">
+      <h2 class="section">Stock de productos terminados</h2>
+      <p class="hint" style="margin-bottom:10px;">Se calcula solo: <b>producido − vendido ± ajustes</b>. Cada venta con productos descuenta y cada producción suma.</p>
+      <div id="stock-alerta"></div>
+      <div class="actions" style="margin-bottom:10px;">
+        <button class="btn secondary small" id="s-conteo-btn">Contar stock</button>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="s-todos" style="width:auto;"> Mostrar productos sin movimiento</label>
+      </div>
+      <div id="s-conteo-box" style="display:none;" class="alert">
+        Escribí cuánto hay <b>de verdad</b> de cada producto. Al guardar se crea un ajuste por la diferencia.
+        <div class="row" style="margin-top:8px;"><div class="field narrow"><label for="s-conteo-fecha">Fecha del conteo</label><input type="date" id="s-conteo-fecha"></div></div>
+        <div class="actions"><button class="btn small" id="s-conteo-guardar">Guardar conteo</button><button class="btn secondary small" id="s-conteo-cancelar">Cancelar</button></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Producto</th><th class="amt">Stock</th><th class="amt hide-sm">Producido</th><th class="amt hide-sm">Vendido</th><th class="amt hide-sm">Ajustes</th><th class="amt">Valor al costo</th><th></th></tr></thead>
+        <tbody id="tbl-stock"></tbody>
+      </table></div>
+    </div>
+    <div class="panel" id="ajuste-panel">
+      <h2 class="section">Ajuste manual</h2>
+      <p class="hint" style="margin-bottom:8px;">Para mermas, autoconsumo, regalos. Cantidad negativa = sale del stock.</p>
+      <div class="row">
+        <div class="field narrow"><label for="a-fecha">Fecha</label><input type="date" id="a-fecha"></div>
+        <div class="field wide"><label for="a-prod">Producto</label><select id="a-prod"></select></div>
+        <div class="field narrow"><label for="a-cant">Cantidad (±)</label><input type="number" id="a-cant" step="0.5" inputmode="decimal"></div>
+        <div class="field narrow"><label for="a-motivo">Motivo</label><select id="a-motivo"><option>Merma</option><option>Autoconsumo</option><option>Regalo</option><option>Conteo</option><option>Otro</option></select></div>
+      </div>
+      <div class="row"><div class="field"><label for="a-nota">Nota</label><input id="a-nota" placeholder="Opcional"></div></div>
+      <button class="btn" id="a-guardar">Guardar ajuste</button>
+      <h3 class="sub">Últimos ajustes</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Producto</th><th class="amt">Cantidad</th><th>Motivo</th><th></th></tr></thead>
+        <tbody id="tbl-ajustes"></tbody>
+      </table></div>
+      <div class="empty" id="ajustes-empty">Sin ajustes.</div>
+    </div>
+  </section>
+
+  <!-- COSTOS -->
+  <section id="view-costos" class="view">
+    <div class="panel">
+      <div class="seg" id="costos-seg" style="margin-bottom:12px;"><button data-v="productos" class="on">Productos</button><button data-v="insumos">Insumos</button></div>
+
+      <div id="costos-productos">
+        <p class="hint" style="margin-bottom:10px;">El costo sale de la receta con el precio <b>actual</b> de cada insumo. Cambiás un precio en Insumos y se recalcula todo.</p>
+        <div class="row">
+          <div class="field"><label for="cp-buscar">Buscar</label><input id="cp-buscar" placeholder="Nombre del producto"></div>
+          <div class="field narrow"><label for="cp-cat">Categoría</label><select id="cp-cat"></select></div>
+          <div class="field narrow" style="flex:0 0 auto;"><label>&nbsp;</label><button class="btn" id="cp-nuevo">+ Producto</button></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Producto</th><th class="amt">Costo</th><th class="amt">Precio</th><th class="amt">Margen</th><th class="amt hide-sm">Sugerido</th></tr></thead>
+          <tbody id="tbl-costos"></tbody>
+        </table></div>
+      </div>
+
+      <div id="costos-insumos" style="display:none;">
+        <p class="hint" style="margin-bottom:10px;">Cambiá el precio y apretá Enter (o salí del campo): se guarda y se recalculan los productos que lo usan.</p>
+        <div class="row">
+          <div class="field"><label for="ci-buscar">Buscar</label><input id="ci-buscar" placeholder="Nombre del insumo"></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Insumo</th><th>Unidad</th><th class="amt">Precio</th><th class="hide-sm">Actualizado</th><th class="hide-sm">Se usa en</th><th></th></tr></thead>
+          <tbody id="tbl-insumos"></tbody>
+        </table></div>
+        <h3 class="sub">Agregar insumo</h3>
+        <div class="row">
+          <div class="field wide"><label for="ci-nombre">Nombre</label><input id="ci-nombre"></div>
+          <div class="field narrow"><label for="ci-unidad">Unidad</label><input id="ci-unidad" list="dl-unidades-ins" placeholder="kg, u, lt"></div>
+          <div class="field narrow"><label for="ci-costo">Precio por unidad</label><input type="number" id="ci-costo" min="0" step="0.01" inputmode="decimal"></div>
+          <div class="field narrow" style="flex:0 0 auto;"><label>&nbsp;</label><button class="btn" id="ci-guardar">Agregar</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="prod-editor" style="display:none;">
+      <h2 class="section" id="pe-titulo">Producto</h2>
+      <div class="row">
+        <div class="field wide"><label for="pe-nombre">Nombre</label><input id="pe-nombre"></div>
+        <div class="field narrow"><label for="pe-cat">Categoría</label><input id="pe-cat" list="dl-cats-prod"></div>
+        <div class="field narrow"><label for="pe-tipo">Tipo</label><select id="pe-tipo"><option value="propio">Producción propia</option><option value="reventa">Reventa (tercerizado)</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field narrow"><label for="pe-unidad">Se vende por</label><input id="pe-unidad" list="dl-unidades" placeholder="docena, porción…"></div>
+        <div class="field narrow"><label for="pe-rinde" id="pe-rinde-label">Rinde por tanda</label><input type="number" id="pe-rinde" min="0" step="0.5" inputmode="decimal"></div>
+        <div class="field narrow"><label for="pe-precio">Precio</label><input type="number" id="pe-precio" min="0" step="1" inputmode="decimal"></div>
+        <div class="field narrow"><label for="pe-precio-may">Precio mayorista</label><input type="number" id="pe-precio-may" min="0" step="1" inputmode="decimal" placeholder="Opcional"></div>
+        <div class="field narrow"><label for="pe-recargo">Recargo sugerido %</label><input type="number" id="pe-recargo" min="0" step="5" inputmode="decimal"></div>
+        <div class="field narrow"><label for="pe-min">Stock mínimo</label><input type="number" id="pe-min" min="0" step="0.5" inputmode="decimal" placeholder="Opcional"></div>
+      </div>
+      <p class="hint" id="pe-rinde-hint"></p>
+      <h3 class="sub">Receta (para una tanda)</h3>
+      <div class="receta" id="pe-receta"></div>
+      <button class="btn ghost" id="pe-add">+ Agregar insumo</button>
+      <div class="calc-box" id="pe-calc"></div>
+      <div class="row">
+        <div class="field wide"><label for="pe-notas">Notas</label><input id="pe-notas"></div>
+        <div class="field narrow" style="flex:0 0 auto;"><label>&nbsp;</label><label style="display:flex;gap:6px;align-items:center;font-size:14px;"><input type="checkbox" id="pe-activo" style="width:auto;"> Activo</label></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="pe-guardar">Guardar</button>
+        <button class="btn secondary" id="pe-cerrar">Cerrar</button>
+        <button class="btn secondary" id="pe-duplicar">Duplicar</button>
+        <button class="btn danger" id="pe-borrar">Borrar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTADOS -->
+  <section id="view-resultados" class="view">
+    <div class="panel">
+      <h2 class="section">Estado de resultados</h2>
+      <div class="nav-mes"><label for="r-anio" class="hint">Año</label><select id="r-anio"></select></div>
+      <p class="hint" style="margin-bottom:10px;"><b>Resultado</b> = ventas − egresos cargados (la plata real). <b>Margen teórico</b> = cuánto deja lo vendido según el costo de receta (solo ventas con productos; las recetas ya incluyen horas de trabajo y luz/gas).</p>
+      <div class="table-wrap"><table id="tbl-resultados"></table></div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Rentabilidad por producto</h2>
+      <div class="nav-mes">
+        <select id="r-periodo"></select>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Producto</th><th class="amt">Vendido</th><th class="amt">Ingresos</th><th class="amt hide-sm">Costo</th><th class="amt">Ganancia</th><th class="amt">Margen</th></tr></thead>
+        <tbody id="tbl-rent-prod"></tbody>
+      </table></div>
+      <div class="empty" id="rent-prod-empty">No hay ventas con productos en este período.</div>
+      <p class="hint" id="rent-prod-nota"></p>
+    </div>
+    <div class="panel">
+      <h2 class="section">Egresos por categoría</h2>
+      <div class="table-wrap"><table id="tbl-rent-gastos"></table></div>
+    </div>
+  </section>
+
+  <!-- CLIENTES -->
+  <section id="view-clientes" class="view">
+    <div class="panel" id="cliente-panel">
+      <h2 class="section" id="c-titulo">Nuevo cliente</h2>
+      <div class="row">
+        <div class="field wide"><label for="c-nombre">Nombre</label><input id="c-nombre"></div>
+        <div class="field narrow"><label for="c-tipo">Tipo</label><select id="c-tipo"><option>Particular</option><option>Mayorista</option></select></div>
+        <div class="field"><label for="c-tel">Teléfono</label><input id="c-tel" inputmode="tel"></div>
+      </div>
+      <div class="row"><div class="field"><label for="c-notas">Notas</label><input id="c-notas"></div></div>
+      <div class="actions">
+        <button class="btn" id="c-guardar">Guardar</button>
+        <button class="btn secondary" id="c-cancelar" style="display:none;">Cancelar</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Clientes</h2>
+      <div class="row"><div class="field"><label for="c-buscar">Buscar</label><input id="c-buscar"></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Cliente</th><th class="amt">Compras</th><th class="amt">Total</th><th class="hide-sm">Última</th><th class="amt">Debe</th><th></th></tr></thead>
+        <tbody id="tbl-clientes"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- CONFIGURACIÓN -->
+  <section id="view-config" class="view">
+    <div class="panel">
+      <h2 class="section">Categorías de gasto</h2>
+      <p class="hint" style="margin-bottom:10px;">El grupo ordena el estado de resultados: <b>Mercadería</b> (lo que se compra para producir o revender), <b>Fijos</b> (sueldos, impuestos), <b>Otros</b>.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Categoría</th><th>Grupo</th><th></th></tr></thead>
+        <tbody id="tbl-cats"></tbody>
+      </table></div>
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label for="cat-nombre">Nueva categoría</label><input id="cat-nombre"></div>
+        <div class="field narrow"><label for="cat-grupo">Grupo</label><select id="cat-grupo"></select></div>
+        <div class="field narrow" style="flex:0 0 auto;"><label>&nbsp;</label><button class="btn" id="cat-guardar">Agregar</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Importar la planilla vieja</h2>
+      <p class="hint" style="margin-bottom:10px;">Lee las pestañas COSTOS, PRODUCCION, INGRESOS Y EGRESOS, CLIENTES y Base de datos de la planilla, y las pasa a la app. No las modifica. Solo se puede hacer una vez, con la app vacía.</p>
+      <div class="actions"><button class="btn secondary" id="imp-preview">Ver qué se importaría</button><button class="btn" id="imp-run" disabled>Importar</button></div>
+      <div id="imp-result" style="margin-top:12px;"></div>
+    </div>
+    <div class="panel">
+      <h2 class="section">Datos</h2>
+      <p class="hint">Todo se guarda en la planilla de Google <b>KASA NORTE</b>, en las pestañas que empiezan con "App". Se pueden abrir y leer, pero conviene no editarlas a mano.</p>
+    </div>
+  </section>
+</main>
+
+<datalist id="dl-clientes"></datalist>
+<datalist id="dl-proveedores"></datalist>
+<datalist id="dl-cats-prod"></datalist>
+<datalist id="dl-unidades"><option value="docena"><option value="media docena"><option value="unidad"><option value="porción"><option value="caja"><option value="pack"><option value="kg"></datalist>
+<datalist id="dl-unidades-ins"><option value="kg"><option value="u"><option value="lt"><option value="doc"><option value="caja"><option value="mts"><option value="hs"></datalist>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/calc.js"></script>
+<script src="/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+</script>
+</body>
+</html>
