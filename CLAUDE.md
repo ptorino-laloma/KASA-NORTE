@@ -39,12 +39,11 @@ public/
   app.js              UI (sin frameworks)
   calc.js             TODOS los cálculos del negocio; lo usan el navegador y el servidor
   sw.js, manifest     PWA instalable
-  fonts/              League Spartan + Figtree (woff2 variables, licencia OFL)
-  logo.svg            logo redibujado en vectores
+  fonts/              Cabin (textos, del brand book) + League Spartan (títulos), woff2 OFL
+  brand/              logo-crema.png e isotipo.png sacados del brand book (PDF)
 scripts/
   test.js             pruebas sin dependencias
   exportar-planilla-vieja.py  (dev) xlsx → data/planilla-vieja.json para probar la importación
-  iconos.js           genera public/icons/
 ```
 
 ## Decisiones de arquitectura a respetar
@@ -62,8 +61,9 @@ scripts/
   planilla) ni claves. `data/*.json`, `*.xlsx`, `.env` están en `.gitignore`. Las
   pruebas usan datos inventados.
 - Los ids los genera el servidor (`uid()`).
-- **Marca**: colores en `:root` de `index.html`; fuentes locales (no Google Fonts).
-  El logo del encabezado es SVG con letras en trazos (no depende de la fuente).
+- **Marca** (brand book de Kasa Norte): colores en `:root` de `index.html`; fuentes
+  locales (no Google Fonts); logo e isotipo como PNG en `public/brand/`. Íconos de
+  la PWA = isotipo crema sobre bordó (`public/icons/`).
 
 ## Reglas de negocio que no hay que romper sin querer (detalle en `estado.md`)
 - Costo por unidad = Σ(cantidad × precio actual del insumo) / rinde. Sin receta o

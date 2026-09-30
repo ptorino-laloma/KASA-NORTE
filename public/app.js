@@ -884,7 +884,7 @@ function delta(act, ant, subeEsBueno, esPct) {
 }
 function renderPanelResultados(r, rc) {
   const a = Calc.resumen(S, r), b = Calc.resumen(S, rc);
-  const kpi = (label, value, d, cls) => `<div class="kpi"><div class="label">${label}</div><div class="value num ${cls || ''}">${value}</div><div class="foot">${d} <span class="muted">vs. comparación</span></div></div>`;
+  const kpi = (label, value, d, cls) => `<div class="kpi"><div class="label">${label}</div><div class="value num ${cls || ''}">${value}</div><div class="foot">${d}${d.includes('sin comparación') ? '' : ' <span class="muted">vs. comparación</span>'}</div></div>`;
   $('pr-kpis').innerHTML =
     kpi('Ventas', fmt(a.ventasTotal), delta(a.ventasTotal, b.ventasTotal, true)) +
     kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
@@ -936,7 +936,7 @@ function nice(max) {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
 }
 // Halo del color de fondo para que las etiquetas se lean aunque pasen sobre una barra.
-const HALO = 'stroke="#FFFBF8" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke"';
+const HALO = 'stroke="#FFFCF7" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke"';
 function dibujarTendencia(el, data) {
   const W = Math.max(300, el.clientWidth || 600), H = 280;
   const m = { t: 22, r: 10, b: 30, l: 50 };
@@ -957,7 +957,7 @@ function dibujarTendencia(el, data) {
   let g = '';
   for (let v = bot; v <= top + 1e-6; v += paso) {
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? '#BFAFA8' : '#EDE3DE'}" stroke-width="1"/>`;
-    g += `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#7A625B">${fmtC(v)}</text>`;
+    g += `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#75625A">${fmtC(v)}</text>`;
   }
   const cs = getComputedStyle(document.documentElement);
   const cV = cs.getPropertyValue('--c-ventas').trim(), cE = cs.getPropertyValue('--c-egresos').trim(), cR = cs.getPropertyValue('--c-resultado').trim();
@@ -965,14 +965,14 @@ function dibujarTendencia(el, data) {
     const x = cx(i);
     g += col(x - bw - 1, d.ventasTotal, cV) + col(x + 1, d.gastosTotal, cE);
     if (d.ventasTotal) g += `<text x="${x - bw / 2 - 1}" y="${y(d.ventasTotal) - 5}" text-anchor="middle" font-size="10.5" fill="#2B1A17" font-weight="600" ${HALO}>${fmtC(d.ventasTotal)}</text>`;
-    g += `<text x="${x}" y="${H - 10}" text-anchor="middle" font-size="11.5" fill="#7A625B">${mesCorto(d.mes)}</text>`;
+    g += `<text x="${x}" y="${H - 10}" text-anchor="middle" font-size="11.5" fill="#75625A">${mesCorto(d.mes)}</text>`;
   });
   const pts = data.map((d, i) => [cx(i), y(d.resultadoFinal)]);
   g += `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${cR}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   pts.forEach(([x, yy], i) => {
-    g += `<circle cx="${x}" cy="${yy}" r="4.5" fill="${cR}" stroke="#FFFBF8" stroke-width="2"/>`;
+    g += `<circle cx="${x}" cy="${yy}" r="4.5" fill="${cR}" stroke="#FFFCF7" stroke-width="2"/>`;
     const v = data[i].resultadoFinal;
-    g += `<text x="${x}" y="${yy + 17}" text-anchor="middle" font-size="10.5" fill="${v < 0 ? '#A3161C' : '#4F6B2E'}" font-weight="700" ${HALO}>${fmtC(v)}</text>`;
+    g += `<text x="${x}" y="${yy + 17}" text-anchor="middle" font-size="10.5" fill="${v < 0 ? '#A3161C' : '#4B6527'}" font-weight="700" ${HALO}>${fmtC(v)}</text>`;
   });
   // zonas de hover por mes
   data.forEach((d, i) => { g += `<rect data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih}" fill="transparent"/>`; });

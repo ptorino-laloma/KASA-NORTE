@@ -41,16 +41,23 @@ Glosario de las tarjetas:
 - **Stock a precio de venta**: stock positivo de productos × precio; "dejaría" =
   eso menos su costo de receta.
 
-### Marca
-Colores tomados del logo y los posts de Instagram (bordó `#6B0512`, rojo
-`#8F0E11`, crema `#F0DDD3`, mostaza `#DBA443`, oliva `#78833E`, fondo `#F6EFEB`).
-Tipografías servidas desde la app (`public/fonts/`, licencia OFL): League Spartan
-(la más parecida en Google Fonts a la del logo; **la original no está
-identificada**) y Figtree. El logo del encabezado está redibujado en vectores
-(letras convertidas a trazos, tomate a mano) porque solo había una captura de
-baja resolución; si aparece el archivo original, reemplazarlo. `public/logo.svg`
-es la versión suelta. Colores del gráfico validados para daltonismo con el
-validador de la guía de visualización.
+### Marca (brand book "KASA NORTE", PDF de 8 páginas, 2026-09-30)
+- **Logo**: el principal del brand book, versión crema sobre bordó
+  (`public/brand/logo-crema.png`, extraído del PDF con su transparencia). El
+  isotipo (tomate) está en `public/brand/isotipo.png`; los íconos de la app son el
+  isotipo en crema sobre bordó. Reemplazan al logo redibujado de la v2.
+- **Colores** (tomados de las páginas del brand book): bordó `#6A050E`, rojo tomate
+  `#B82923`, mostaza `#D9A340`, oliva `#798641`, verde oscuro `#4B6527`, crema
+  `#E7DED1` (fondo de la app: tinte claro `#F5F0E9`). Gráfico: ventas `#B82923`,
+  egresos `#D9A340`, resultado `#6F8A2E` (oliva un poco más saturado para pasar el
+  validador de daltonismo).
+- **Tipografías**: el brand book pide Bolota Bold (títulos), Organic Hand
+  (subtítulos) y Cabin (textos). Cabin está en Google Fonts (OFL) y se usa tal cual.
+  **Bolota y Organic Hand no son de uso libre** (no están en Google Fonts; la
+  carpeta de tipografías del PDF no es accesible) y no se sacaron del PDF por
+  licencia: se aproximan con League Spartan 800 (títulos) y 500 espaciada en
+  mayúsculas (etiquetas). Si aparecen los archivos con licencia web, se cambian en
+  el `@font-face` de `index.html`.
 
 ## 3. Reglas de negocio
 ### 3.1 Costeo
