@@ -31,10 +31,11 @@ const nameOf = (list, id) => (list.find(x => x.id === id) || {}).nombre || '';
 const SHEETS = {
   insumos: {
     title: 'App Insumos',
-    headers: ['id', 'nombre', 'unidad', 'costo', 'actualizado', 'notas'],
-    toRows: s => s.insumos.map(i => [i.id, i.nombre, i.unidad || '', i.costo ?? '', i.actualizado || '', i.notas || '']),
+    headers: ['id', 'nombre', 'unidad', 'costo', 'actualizado', 'notas', 'familia'],
+    toRows: s => s.insumos.map(i => [i.id, i.nombre, i.unidad || '', i.costo ?? '', i.actualizado || '', i.notas || '', i.familia || '']),
     fromRows: rows => rows.filter(r => r[0]).map(r => ({
-      id: str(r[0]), nombre: str(r[1]), unidad: optStr(r[2]), costo: optNum(r[3]), actualizado: optStr(r[4]), notas: optStr(r[5])
+      id: str(r[0]), nombre: str(r[1]), unidad: optStr(r[2]), costo: optNum(r[3]), actualizado: optStr(r[4]), notas: optStr(r[5]),
+      familia: optStr(r[6])
     }))
   },
   productos: {
@@ -109,6 +110,20 @@ const SHEETS = {
     toRows: s => s.clientes.map(c => [c.id, c.nombre, c.tipo, c.telefono || '', c.notas || '']),
     fromRows: rows => rows.filter(r => r[0]).map(r => ({
       id: str(r[0]), nombre: str(r[1]), tipo: str(r[2]) || 'Particular', telefono: optStr(r[3]), notas: optStr(r[4])
+    }))
+  },
+  familias: {
+    title: 'App Familias',
+    headers: ['nombre', 'tipo'],
+    toRows: s => s.familias.map(f => [f.nombre, f.tipo]),
+    fromRows: rows => rows.filter(r => r[0]).map(r => ({ nombre: str(r[0]), tipo: str(r[1]) || 'producto' }))
+  },
+  otrosIngresos: {
+    title: 'App Otros Ingresos',
+    headers: ['id', 'fecha', 'concepto', 'monto', 'medio_pago', 'nota', 'creado'],
+    toRows: s => s.otrosIngresos.map(o => [o.id, o.fecha, o.concepto, o.monto, o.medioPago || '', o.nota || '', o.creado || '']),
+    fromRows: rows => rows.filter(r => r[0]).map(r => ({
+      id: str(r[0]), fecha: str(r[1]), concepto: str(r[2]), monto: num(r[3]), medioPago: optStr(r[4]), nota: optStr(r[5]), creado: str(r[6])
     }))
   },
   categoriasGasto: {

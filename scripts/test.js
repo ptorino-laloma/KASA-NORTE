@@ -18,7 +18,8 @@ function test(nombre, fn) {
 }
 const vacio = () => ({
   insumos: [], productos: [], recetas: [], producciones: [], ventas: [], ventaItems: [],
-  gastos: [], ajustes: [], clientes: [], categoriasGasto: DEFAULT_CATEGORIAS_GASTO.map(c => ({ ...c }))
+  gastos: [], ajustes: [], clientes: [], categoriasGasto: DEFAULT_CATEGORIAS_GASTO.map(c => ({ ...c })),
+  familias: [{ nombre: 'Empanadas', tipo: 'producto' }, { nombre: 'Carnes', tipo: 'insumo' }], otrosIngresos: []
 });
 
 // Escenario: empanada de carne, 10 docenas por tanda.
@@ -122,6 +123,72 @@ test('renombrar categoría de gasto actualiza los gastos', () => {
   assert.equal(s.gastos[0].categoria, 'Supermercado');
 });
 
+test('familias: validación, renombrar en cascada, no borrar si se usa', () => {
+  const { s, pid, carne } = escenario();
+  assert.throws(() => routes.updateProducto(s, pid, { categoria: 'Inventada' }), /no existe/);
+  routes.updateInsumo(s, carne.id, { familia: 'carnes' });
+  assert.equal(s.insumos[0].familia, 'Carnes');
+  routes.updateFamilia(s, 'producto', 'Empanadas', { nuevoNombre: 'Empanadas y copetines' });
+  assert.equal(s.productos[0].categoria, 'Empanadas y copetines');
+  assert.throws(() => routes.deleteFamilia(s, 'insumo', 'Carnes'), /La usan/);
+});
+
+test('editar producto desde maestros no pisa rinde ni receta; recetario sí', () => {
+  const { s, pid } = escenario();
+  routes.updateProducto(s, pid, { precio: 26000 });
+  assert.equal(s.productos[0].rinde, 10);
+  assert.equal(s.recetas.length, 3);
+  assert.equal(s.productos[0].precio, 26000);
+  routes.updateReceta(s, pid, { unidad: 'docena', rinde: 5, receta: [{ insumoId: s.insumos[0].id, cantidad: 1 }] });
+  assert.equal(Calc.costoProducto(s, pid).costoUnit, 3000);
+  assert.equal(s.productos[0].precio, 26000);
+});
+
+test('otros ingresos: suman al resultado final, no a ventas', () => {
+  const s = vacio();
+  routes.createOtroIngreso(s, { fecha: '2026-09-10', concepto: 'Préstamo', monto: 1000 });
+  routes.createGasto(s, { fecha: '2026-09-03', categoria: 'Varios', monto: 300 });
+  const r = Calc.resumen(s, Calc.rangoMes('2026-09'));
+  assert.equal(r.ventasTotal, 0);
+  assert.equal(r.resultado, -300);
+  assert.equal(r.resultadoFinal, 700);
+});
+
+test('rangos: período anterior y mismo período del año anterior', () => {
+  assert.deepEqual(Calc.rangoMes('2026-02'), { desde: '2026-02-01', hasta: '2026-02-28' });
+  assert.deepEqual(Calc.rangoAnterior(Calc.rangoMes('2026-01')), { desde: '2025-12-01', hasta: '2025-12-31' });
+  assert.deepEqual(Calc.rangoAnterior({ desde: '2026-04-01', hasta: '2026-06-30' }), { desde: '2026-01-01', hasta: '2026-03-31' });
+  assert.deepEqual(Calc.rangoAnterior({ desde: '2026-09-10', hasta: '2026-09-19' }), { desde: '2026-08-31', hasta: '2026-09-09' });
+  assert.deepEqual(Calc.rangoAnioAnterior(Calc.rangoMes('2028-02')), { desde: '2027-02-01', hasta: '2027-02-28' });
+});
+
+test('panel ventas: agrupar por producto y cliente', () => {
+  const { s, pid } = escenario();
+  routes.createVenta(s, { fecha: '2026-09-02', clienteNombre: 'Ana', items: [{ productoId: pid, cantidad: 2, precioUnit: 25000 }] });
+  routes.createVenta(s, { fecha: '2026-09-03', clienteNombre: 'Beto', items: [{ productoId: pid, cantidad: 1, precioUnit: 20000 }] });
+  const filas = Calc.ventasFilas(s, Calc.rangoMes('2026-09'));
+  const porProd = Calc.agrupar(filas, ['producto']);
+  assert.equal(porProd.length, 1);
+  assert.equal(porProd[0].cantidad, 3);
+  assert.equal(porProd[0].ingreso, 70000);
+  assert.equal(porProd[0].costo, 3 * 5600);
+  const ambos = Calc.agrupar(filas, ['producto', 'cliente']);
+  assert.equal(ambos.length, 2);
+  assert.equal(ambos[0].valores[1], 'Ana');
+});
+
+test('panel costos: total por producto y reparto por insumo cierran igual', () => {
+  const { s, pid, carne } = escenario();
+  routes.createProduccion(s, { fecha: '2026-09-01', productoId: pid, cantidad: 20 }); // 2 tandas, costo 5600 c/u
+  routes.updateInsumo(s, carne.id, { costo: 20000 }); // sube después: no cambia el total congelado
+  const c = Calc.costosProduccion(s, Calc.rangoMes('2026-09'));
+  assert.equal(c.total, 112000);
+  assert.equal(c.porProducto[0].costo, 112000);
+  assert.equal(Math.round(Calc.sum(c.porInsumo, x => x.costo)), 112000);
+  const carneRow = c.porInsumo.find(x => x.nombre === 'Carne');
+  assert.equal(carneRow.consumo, 6); // 2 tandas × 3 kg
+});
+
 // Planilla de ejemplo con la misma forma que las pestañas reales (datos inventados).
 const serial = iso => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000 + 25569);
 function planillaEjemplo() {
@@ -183,6 +250,10 @@ test('importación de la planilla vieja (ejemplo)', () => {
   // CLIENTES: solo los que tienen tipo
   assert.ok(d.clientes.some(c => c.nombre === 'Catering Uno'));
   assert.ok(!d.clientes.some(c => /Prospecto/.test(c.nombre)));
+  // familias: las categorías de producto de la planilla + las de insumo por defecto
+  assert.ok(d.familias.some(f => f.tipo === 'producto' && f.nombre === 'Empanadas'));
+  assert.ok(d.familias.some(f => f.tipo === 'insumo'));
+  assert.deepEqual(d.otrosIngresos, []);
 });
 
 const real = path.join(__dirname, '..', 'data', 'planilla-vieja.json');

@@ -90,7 +90,7 @@ function importar(raw, { hoy } = {}) {
     if (insByKey.has(key(nombre))) { aviso('Insumos', `"${nombre}" está repetido en la lista de insumos: se usa el primero.`); continue; }
     const costo = num(row[cInsCosto]);
     if (costo === null) aviso('Insumos', `"${nombre}" no tiene precio.`);
-    const ins = { id: uid(), nombre, unidad: clean(row[cInsUni]) || null, costo, actualizado: null, notas: null };
+    const ins = { id: uid(), nombre, familia: null, unidad: clean(row[cInsUni]) || null, costo, actualizado: null, notas: null };
     insumos.push(ins);
     insByKey.set(key(nombre), ins);
   }
@@ -145,7 +145,7 @@ function importar(raw, { hoy } = {}) {
       // Sin precio en la receta pero con costo total 0 (ej. "Agua"): la planilla lo costeaba en $0.
       const totHoja = num(row[cCon + 4]);
       const costo = cuHoja !== null ? cuHoja : totHoja === 0 ? 0 : null;
-      ins = { id: uid(), nombre: iNombre, unidad: clean(row[cCon + 2]) || null, costo, actualizado: null, notas: 'Creado en la importación (estaba en una receta pero no en la lista de insumos)' };
+      ins = { id: uid(), nombre: iNombre, familia: null, unidad: clean(row[cCon + 2]) || null, costo, actualizado: null, notas: 'Creado en la importación (estaba en una receta pero no en la lista de insumos)' };
       insumos.push(ins);
       insByKey.set(key(iNombre), ins);
       aviso('Recetas', `"${iNombre}" (receta de ${pNombre}) no estaba en la lista de insumos: se crea${costo === null ? ' sin precio' : ' con $' + costo}.`);
@@ -346,7 +346,14 @@ function importar(raw, { hoy } = {}) {
   if (autoconsumos) aviso('Stock', `${autoconsumos} renglones de autoconsumo sin cobro se pasan como ajuste de stock (no como venta).`);
 
   /* ---------- costos congelados con los precios de hoy ---------- */
-  const st = { insumos, productos, recetas, producciones, ventas, ventaItems, gastos, ajustes, clientes, categoriasGasto };
+  /* ---------- familias: las categorías de producto de la planilla + las de insumo por defecto ---------- */
+  const { DEFAULT_FAMILIAS_INSUMO } = require('./lib.js');
+  const familias = [];
+  productos.forEach(p => { if (p.categoria && !familias.some(f => f.tipo === 'producto' && f.nombre === p.categoria)) familias.push({ nombre: p.categoria, tipo: 'producto' }); });
+  DEFAULT_FAMILIAS_INSUMO.forEach(n => familias.push({ nombre: n, tipo: 'insumo' }));
+  aviso('Insumos', 'Los insumos quedan sin familia (la planilla no la tenía): se asignan en Datos maestros → Insumos.');
+
+  const st = { insumos, productos, recetas, producciones, ventas, ventaItems, gastos, ajustes, clientes, categoriasGasto, familias, otrosIngresos: [] };
   const costos_ = Calc.costosTodos(st);
   const cu = id => { const c = costos_.get(id); return c && c.costoUnit !== null ? Calc.round2(c.costoUnit) : null; };
   producciones.forEach(p => { p.costoUnit = cu(p.productoId); });
@@ -360,7 +367,7 @@ function importar(raw, { hoy } = {}) {
   const resumen = {
     insumos: insumos.length, productos: productos.length, recetas: recetas.length, producciones: producciones.length,
     ventas: ventas.length, ventaItems: ventaItems.length, gastos: gastos.length, ajustes: ajustes.length,
-    clientes: clientes.length, categoriasGasto: categoriasGasto.length,
+    clientes: clientes.length, categoriasGasto: categoriasGasto.length, familias: familias.length,
     totalVentas: Calc.round2(Calc.sum(ventas, v => v.total)), totalGastos: Calc.round2(Calc.sum(gastos, g => g.monto))
   };
   return { data: st, resumen, avisos };

@@ -1,35 +1,61 @@
 # Estado del proyecto — Kasa Norte
 
-Última actualización: 2026-09-30 (primera versión).
+Última actualización: 2026-09-30 (v2: datos maestros, recetario, panel de control, marca).
 
 ## 1. Qué es
 App web (instalable en el celular) para llevar el negocio de comida de Kasa Norte:
-ventas, gastos, producción, stock automático, costeo por receta y estado de
-resultados. Reemplaza la planilla de Google "KASA NORTE" y usa esa misma planilla
-como base de datos (pestañas nuevas "App ...").
+ventas, egresos, producción, stock automático, costeo por receta, panel de
+control y estado de resultados. Reemplaza la planilla de Google "KASA NORTE" y usa
+esa misma planilla como base de datos (pestañas nuevas "App ...").
 
 ## 2. Pantallas
 - **Inicio**: KPIs del mes (ventas, egresos, resultado, margen teórico, por
   cobrar), alertas (stock negativo/bajo mínimo, productos sin costo o sin precio,
-  venta a pérdida, ventas sin detalle, gastos a pagar) y lo más vendido.
-- **Ventas**: una venta = cliente + varios productos. El precio se completa solo
-  (mayorista si el cliente es Mayorista y el producto tiene precio mayorista);
-  se puede cambiar. Muestra el stock disponible. Cobrada/pendiente, medio de pago.
-  Cliente nuevo por nombre → se crea al guardar. Editar, borrar, marcar cobrada.
-- **Gastos**: fecha, categoría, monto, medio, pagado/a pagar, proveedor, detalle.
-- **Producción**: registra tandas propias o compras de reventa (suma stock y
-  congela el costo).
-- **Stock**: calculado; ajustes manuales (merma, autoconsumo, regalo) y **conteo
-  físico** (se escribe lo real y se ajusta la diferencia).
-- **Costos**: productos con costo, precio, margen y precio sugerido; editor de
-  producto con receta y cálculo en vivo; "Duplicar" para armar variantes (ej.
-  copetines a partir de la empanada). Insumos: cambiar el precio en la tabla
-  recalcula todos los productos que lo usan.
-- **Resultados**: tabla mes a mes del año (ventas, mercadería, fijos, otros,
-  egresos, resultado, margen teórico), rentabilidad por producto y egresos por
-  categoría, por mes o año.
-- **Clientes**: compras, total, última compra, deuda.
-- **Configuración**: categorías de gasto y su grupo, importación de la planilla vieja.
+  precio bajo el costo, insumos sin familia, ventas sin detalle, egresos a pagar)
+  y lo más vendido.
+- **Ingresos** → *Ventas*: una venta = cliente + varios productos. Precio
+  automático (mayorista si corresponde), editable. Muestra stock. Cobrada o
+  pendiente, medio de pago. Cliente nuevo por nombre → se crea al guardar.
+  → *Otros ingresos*: lo que entra y no es venta (préstamo, aporte). Suma al
+  resultado final, separado de las ventas.
+- **Egresos**: fecha, categoría, monto, medio, pagado/a pagar, proveedor, detalle.
+- **Producción**: cantidad en unidades de venta; muestra costo por unidad, costo
+  productivo y tandas antes de guardar; congela el costo; suma al stock.
+- **Stock**: calculado; ajustes manuales y **conteo físico**.
+- **Panel** (período: este mes, mes anterior, este año, año anterior o fechas a
+  elección; comparación: período anterior o mismo período del año anterior):
+  - *Ventas*: tabla agrupable por producto, familia, cliente, tipo de cliente y
+    mes (combinables), grupos que se abren con el detalle, filtro, exportar a
+    Excel (CSV con `;` y coma decimal). Muestra 40 grupos y "ver más".
+  - *Costos*: costo productivo total del período, con chips **Por insumo**
+    (agrupado por familia, con consumo) y **Por producto terminado**; compras de
+    mercadería al lado para comparar; exportar.
+  - *Estado de resultados*: tarjetas con variación contra la comparación, gráfico
+    de tendencia (6 meses en el celular, 12 en pantalla ancha) con etiquetas y
+    tooltip, estado de resultados vertical (ventas → mercadería → margen bruto →
+    fijos → otros → resultado operativo → otros ingresos → resultado final, con
+    detalle por categoría) y tabla mes a mes.
+- **Recetario**: se elige el producto, se define unidad de venta y rinde, se
+  cargan insumos y cantidades; calcula en vivo costo de tanda, costo por unidad,
+  sugerido y margen. "Copiar receta de…" otro producto. Lista de todas las
+  recetas con su estado.
+- **Datos maestros** → *Productos* (nombre, familia, tipo, precio con botón "Usar
+  sugerido", recargo, mayorista, stock mínimo, activo); al crear uno nuevo lleva
+  al recetario. *Insumos* (familia y precio editables en la tabla). *Clientes*.
+  *Familias* de productos y de insumos (renombrar actualiza todo; no se borra si
+  se usa).
+- **Configuración**: categorías de egresos y su grupo, importación de la planilla vieja.
+
+### Marca
+Colores tomados del logo y los posts de Instagram (bordó `#6B0512`, rojo
+`#8F0E11`, crema `#F0DDD3`, mostaza `#DBA443`, oliva `#78833E`, fondo `#F6EFEB`).
+Tipografías servidas desde la app (`public/fonts/`, licencia OFL): League Spartan
+(la más parecida en Google Fonts a la del logo; **la original no está
+identificada**) y Figtree. El logo del encabezado está redibujado en vectores
+(letras convertidas a trazos, tomate a mano) porque solo había una captura de
+baja resolución; si aparece el archivo original, reemplazarlo. `public/logo.svg`
+es la versión suelta. Colores del gráfico validados para daltonismo con el
+validador de la guía de visualización.
 
 ## 3. Reglas de negocio
 ### 3.1 Costeo
@@ -63,7 +89,16 @@ sin productos (solo monto) no descuenta stock.
   Popi, Monotributo), Otros (Varios y las nuevas). Esta clasificación es una
   propuesta inicial; confirmarla con la dueña.
 
-### 3.5 Ingreso
+### 3.5 Familias y otros ingresos
+- Productos (`categoria`) e insumos (`familia`) solo pueden usar familias que
+  existan en Datos maestros → Familias (lo valida el servidor).
+- Otros ingresos no son ventas: no entran en ventas, ticket ni margen; se suman
+  en "Resultado final".
+- Panel → Costos: el total por producto es el costo congelado de cada
+  producción; la apertura por insumo reparte ese total según la receta **actual**
+  (la suma cierra igual). Producciones sin costo no suman y se avisa.
+
+### 3.6 Ingreso
 Un solo usuario: `APP_USUARIO` (default "kasa") + `APP_CLAVE`, cookie firmada de
 60 días. En Vercel `APP_CLAVE` y `SESSION_SECRET` son obligatorias (el repo es
 público; un secreto por defecto permitiría fabricar cookies). Un login fallido
@@ -134,7 +169,7 @@ Lo que se encontró en la planilla (a revisar con la dueña):
   con el `client_email` de la cuenta de servicio.
 
 ## 6. Cómo se verificó (2026-09-30)
-- `npm test`: 10 pruebas (costeo, costo congelado, stock y conteo, resumen,
+- `npm test`: 16 pruebas (v2 agrega familias, maestros vs recetario, otros ingresos, rangos de comparación, agrupado de ventas y costos por insumo/producto). Las 10 originales: (costeo, costo congelado, stock y conteo, resumen,
   validaciones, clientes, categorías, importación de ejemplo + real local).
 - Servidor local con backend de archivo: login (clave mala → 401), vista previa e
   importación por API, segunda importación rechazada.
@@ -146,8 +181,15 @@ Lo que se encontró en la planilla (a revisar con la dueña):
   cuenta de servicio en esta sesión). El backend de Sheets es el de Casa-Tafi con
   otras pestañas, más `readRaw` para la importación.
 
+- v2 (2026-09-30): recorrido con Chromium en 390 px y 1280 px de Panel (ventas agrupadas,
+  detalle, exportación CSV, costos por insumo/producto, resultados con comparación y
+  gráfico), Recetario, Datos maestros (usar sugerido, familia de insumo), otros
+  ingresos, producción con costo. Sin errores de JS.
+
 ## 7. Pendientes / ideas
 - Deploy en Vercel + compartir la planilla con la cuenta de servicio + importar.
+- Asignar familia a los insumos importados (quedan sin familia).
+- Reemplazar el logo redibujado por el archivo original si aparece.
 - Conteo físico inicial de stock.
 - Stock de **insumos** (hoy solo de productos terminados). Requiere cargar las
   compras con cantidades, no solo "Verdulería $X".

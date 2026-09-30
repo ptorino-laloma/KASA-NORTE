@@ -18,6 +18,9 @@ const DEFAULT_CATEGORIAS_GASTO = [
   { nombre: 'Varios', grupo: 'Otros' }
 ];
 const GRUPOS_GASTO = ['Mercadería', 'Fijos', 'Otros'];
+// Familias iniciales de insumos (se editan en Datos maestros → Familias).
+const DEFAULT_FAMILIAS_INSUMO = ['Carnes', 'Verdulería', 'Lácteos y fiambres', 'Masas', 'Almacén', 'Reventa', 'Packaging', 'Mano de obra y servicios'];
+const TIPOS_FAMILIA = ['producto', 'insumo'];
 const MEDIOS_PAGO = ['Transferencia', 'Efectivo', 'Otro'];
 const ESTADOS_PAGO = ['pagado', 'pendiente'];
 const TIPOS_PRODUCTO = ['propio', 'reventa'];
@@ -76,5 +79,5 @@ function normName(s) {
 
 module.exports = {
   uid, ApiError, isDate, reqDate, reqText, optText, reqNum, optNum, oneOf, normName,
-  DEFAULT_CATEGORIAS_GASTO, GRUPOS_GASTO, MEDIOS_PAGO, ESTADOS_PAGO, TIPOS_PRODUCTO, TIPOS_CLIENTE
+  DEFAULT_CATEGORIAS_GASTO, GRUPOS_GASTO, DEFAULT_FAMILIAS_INSUMO, TIPOS_FAMILIA, MEDIOS_PAGO, ESTADOS_PAGO, TIPOS_PRODUCTO, TIPOS_CLIENTE
 };

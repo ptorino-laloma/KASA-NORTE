@@ -39,6 +39,8 @@ public/
   app.js              UI (sin frameworks)
   calc.js             TODOS los cálculos del negocio; lo usan el navegador y el servidor
   sw.js, manifest     PWA instalable
+  fonts/              League Spartan + Figtree (woff2 variables, licencia OFL)
+  logo.svg            logo redibujado en vectores
 scripts/
   test.js             pruebas sin dependencias
   exportar-planilla-vieja.py  (dev) xlsx → data/planilla-vieja.json para probar la importación
@@ -60,6 +62,8 @@ scripts/
   planilla) ni claves. `data/*.json`, `*.xlsx`, `.env` están en `.gitignore`. Las
   pruebas usan datos inventados.
 - Los ids los genera el servidor (`uid()`).
+- **Marca**: colores en `:root` de `index.html`; fuentes locales (no Google Fonts).
+  El logo del encabezado es SVG con letras en trazos (no depende de la fuente).
 
 ## Reglas de negocio que no hay que romper sin querer (detalle en `estado.md`)
 - Costo por unidad = Σ(cantidad × precio actual del insumo) / rinde. Sin receta o

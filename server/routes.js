@@ -4,7 +4,7 @@
 const Calc = require('../public/calc.js');
 const {
   uid, ApiError, reqDate, reqText, optText, reqNum, optNum, oneOf, normName,
-  GRUPOS_GASTO, MEDIOS_PAGO, ESTADOS_PAGO, TIPOS_PRODUCTO, TIPOS_CLIENTE
+  GRUPOS_GASTO, MEDIOS_PAGO, ESTADOS_PAGO, TIPOS_PRODUCTO, TIPOS_CLIENTE, TIPOS_FAMILIA
 } = require('./lib.js');
 
 const MOTIVOS_AJUSTE = ['Conteo', 'Merma', 'Autoconsumo', 'Regalo', 'Otro'];
@@ -27,6 +27,15 @@ function remove(list, id, que) {
 function checkUnico(list, nombre, exceptId, que) {
   const k = normName(nombre);
   if (list.some(x => x.id !== exceptId && normName(x.nombre) === k)) throw new ApiError(400, `Ya existe ${que} con ese nombre.`);
+}
+
+// Familia opcional: si viene, tiene que existir en Datos maestros → Familias.
+function optFamilia(state, v, tipo) {
+  const s = optText(v, 40);
+  if (!s) return null;
+  const f = state.familias.find(x => x.tipo === tipo && normName(x.nombre) === normName(s));
+  if (!f) throw new ApiError(400, `La familia "${s}" no existe. Creala primero en Datos maestros → Familias.`);
+  return f.nombre;
 }
 
 function optMedio(v) {
@@ -197,7 +206,10 @@ function deleteAjuste(state, id) {
 function datosInsumo(state, body, id) {
   const nombre = reqText(body.nombre, 'el nombre', 80);
   checkUnico(state.insumos, nombre, id, 'un insumo');
-  return { nombre, unidad: optText(body.unidad, 20), costo: optNum(body.costo, 'El costo'), notas: optText(body.notas) };
+  return {
+    nombre, familia: optFamilia(state, body.familia, 'insumo'), unidad: optText(body.unidad, 20),
+    costo: optNum(body.costo, 'El costo'), notas: optText(body.notas)
+  };
 }
 
 function createInsumo(state, body) {
@@ -206,9 +218,10 @@ function createInsumo(state, body) {
   return { id: i.id };
 }
 
+// Los campos que no vienen en el body se mantienen (ej. cambiar solo el precio o la familia).
 function updateInsumo(state, id, body) {
   const ins = find(state.insumos, id, 'el insumo');
-  const datos = datosInsumo(state, body, id);
+  const datos = datosInsumo(state, { ...ins, ...body }, id);
   if (datos.costo !== ins.costo) datos.actualizado = hoy();
   Object.assign(ins, datos);
 }
@@ -229,7 +242,7 @@ function datosProducto(state, body, id) {
   if (rinde === 0) throw new ApiError(400, 'El rinde no puede ser cero.');
   return {
     nombre,
-    categoria: optText(body.categoria, 40),
+    categoria: optFamilia(state, body.categoria, 'producto'),
     tipo: oneOf(body.tipo || 'propio', TIPOS_PRODUCTO, 'El tipo'),
     unidad: optText(body.unidad, 20),
     rinde,
@@ -269,11 +282,24 @@ function createProducto(state, body) {
   return { id: p.id };
 }
 
+// Los campos que no vienen se mantienen: Datos maestros no manda unidad/rinde/receta
+// y el Recetario no manda precio.
 function updateProducto(state, id, body) {
   const p = find(state.productos, id, 'el producto');
-  const datos = datosProducto(state, body, id);
+  const datos = datosProducto(state, { ...p, ...body }, id);
   const receta = parseReceta(state, body.receta);
   Object.assign(p, datos);
+  setReceta(state, id, receta);
+}
+
+// Recetario: unidad de venta, rinde y receta de un producto.
+function updateReceta(state, id, body) {
+  const p = find(state.productos, id, 'el producto');
+  const rinde = optNum(body.rinde, 'El rinde');
+  if (rinde === 0) throw new ApiError(400, 'El rinde no puede ser cero.');
+  const receta = parseReceta(state, body.receta || []);
+  p.unidad = optText(body.unidad, 20);
+  p.rinde = rinde;
   setReceta(state, id, receta);
 }
 
@@ -343,8 +369,68 @@ function deleteCategoriaGasto(state, nombre) {
   state.categoriasGasto.splice(i, 1);
 }
 
+/* ---------- familias ---------- */
+
+function createFamilia(state, body) {
+  const tipo = oneOf(body.tipo, TIPOS_FAMILIA, 'El tipo de familia');
+  const nombre = reqText(body.nombre, 'el nombre', 40);
+  if (state.familias.some(f => f.tipo === tipo && normName(f.nombre) === normName(nombre))) throw new ApiError(400, 'Esa familia ya existe.');
+  state.familias.push({ nombre, tipo });
+}
+
+const usosFamilia = (state, tipo, nombre) => tipo === 'producto'
+  ? state.productos.filter(p => p.categoria === nombre)
+  : state.insumos.filter(i => i.familia === nombre);
+
+// Renombrar actualiza los productos o insumos que la usan.
+function updateFamilia(state, tipo, nombre, body) {
+  const f = state.familias.find(x => x.tipo === tipo && x.nombre === nombre);
+  if (!f) throw new ApiError(404, 'No encontré la familia.');
+  const nuevo = reqText(body.nuevoNombre, 'el nombre', 40);
+  if (nuevo === nombre) return;
+  if (state.familias.some(x => x !== f && x.tipo === tipo && normName(x.nombre) === normName(nuevo))) throw new ApiError(400, 'Esa familia ya existe.');
+  usosFamilia(state, tipo, nombre).forEach(x => { if (tipo === 'producto') x.categoria = nuevo; else x.familia = nuevo; });
+  f.nombre = nuevo;
+}
+
+function deleteFamilia(state, tipo, nombre) {
+  const i = state.familias.findIndex(x => x.tipo === tipo && x.nombre === nombre);
+  if (i < 0) throw new ApiError(404, 'No encontré la familia.');
+  const n = usosFamilia(state, tipo, nombre).length;
+  if (n) throw new ApiError(400, `La usan ${n} ${tipo === 'producto' ? 'productos' : 'insumos'}: no se puede borrar.`);
+  state.familias.splice(i, 1);
+}
+
+/* ---------- otros ingresos (lo que entra y no es venta) ---------- */
+
+function datosOtroIngreso(body) {
+  return {
+    fecha: reqDate(body.fecha),
+    concepto: reqText(body.concepto, 'el concepto', 80),
+    monto: reqNum(body.monto, 'El monto'),
+    medioPago: optMedio(body.medioPago),
+    nota: optText(body.nota)
+  };
+}
+
+function createOtroIngreso(state, body) {
+  const o = { id: uid(), ...datosOtroIngreso(body), creado: now() };
+  state.otrosIngresos.push(o);
+  return { id: o.id };
+}
+
+function updateOtroIngreso(state, id, body) {
+  Object.assign(find(state.otrosIngresos, id, 'el ingreso'), datosOtroIngreso(body));
+}
+
+function deleteOtroIngreso(state, id) {
+  remove(state.otrosIngresos, id, 'el ingreso');
+}
+
 module.exports = {
   MOTIVOS_AJUSTE, getState,
+  createFamilia, updateFamilia, deleteFamilia,
+  createOtroIngreso, updateOtroIngreso, deleteOtroIngreso, updateReceta,
   createVenta, updateVenta, setCobro, deleteVenta,
   createGasto, updateGasto, deleteGasto,
   createProduccion, deleteProduccion, createAjuste, conteoStock, deleteAjuste,

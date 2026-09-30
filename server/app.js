@@ -35,6 +35,16 @@ const ROUTES = [
   ['PUT', '/api/productos/:id', ['productos', 'recetas'], c => routes.updateProducto(c.state, c.params.id, c.body)],
   ['DELETE', '/api/productos/:id', ['productos', 'recetas'], c => routes.deleteProducto(c.state, c.params.id)],
 
+  ['PUT', '/api/productos/:id/receta', ['productos', 'recetas'], c => routes.updateReceta(c.state, c.params.id, c.body)],
+
+  ['POST', '/api/otros-ingresos', ['otrosIngresos'], c => routes.createOtroIngreso(c.state, c.body), 201],
+  ['PUT', '/api/otros-ingresos/:id', ['otrosIngresos'], c => routes.updateOtroIngreso(c.state, c.params.id, c.body)],
+  ['DELETE', '/api/otros-ingresos/:id', ['otrosIngresos'], c => routes.deleteOtroIngreso(c.state, c.params.id)],
+
+  ['POST', '/api/familias', ['familias'], c => routes.createFamilia(c.state, c.body), 201],
+  ['PUT', '/api/familias/:tipo/:nombre', ['familias', 'productos', 'insumos'], c => routes.updateFamilia(c.state, c.params.tipo, c.params.nombre, c.body)],
+  ['DELETE', '/api/familias/:tipo/:nombre', ['familias'], c => routes.deleteFamilia(c.state, c.params.tipo, c.params.nombre)],
+
   ['POST', '/api/clientes', ['clientes'], c => routes.createCliente(c.state, c.body), 201],
   ['PUT', '/api/clientes/:id', ['clientes'], c => routes.updateCliente(c.state, c.params.id, c.body)],
   ['DELETE', '/api/clientes/:id', ['clientes'], c => routes.deleteCliente(c.state, c.params.id)],
@@ -48,7 +58,7 @@ const ROUTES = [
   ['POST', '/api/importar', store.TABLES, c => runImport(c.state), 201],
 ];
 
-const DATOS_PROPIOS = ['insumos', 'productos', 'producciones', 'ventas', 'gastos', 'clientes'];
+const DATOS_PROPIOS = ['insumos', 'productos', 'producciones', 'ventas', 'gastos', 'clientes', 'otrosIngresos'];
 
 async function leerPlanillaVieja(state) {
   const raw = await store.readRaw(TABS);

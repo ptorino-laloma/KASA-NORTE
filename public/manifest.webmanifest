@@ -1,13 +1,13 @@
 {
   "name": "Kasa Norte",
   "short_name": "Kasa Norte",
-  "description": "Ventas, stock, costos y resultados de Kasa Norte",
+  "description": "Kasa Norte, comida casera congelada: ventas, stock, costos y resultados",
   "lang": "es-AR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F5F1EA",
-  "theme_color": "#5E2616",
+  "background_color": "#F6EFEB",
+  "theme_color": "#6B0512",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
