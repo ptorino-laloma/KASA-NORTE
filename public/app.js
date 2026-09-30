@@ -148,7 +148,7 @@ async function login() {
     await api('POST', '/api/login', { usuario: $('login-user').value, clave: $('login-pass').value });
     $('login-pass').value = '';
     await start();
-  } catch (e) { $('login-error').textContent = e.message; }
+  } catch (e) { $('login-error').textContent = e.message + (/incorrect/.test(e.message) ? ' Ojo con mayúsculas; podés tocar "Mostrar contraseña" para revisarla.' : ''); }
 }
 async function start() {
   const res = await fetch('/api/state');
@@ -1393,6 +1393,7 @@ $('imp-preview').addEventListener('click', e => guardando(e.target, previewImpor
 $('imp-run').addEventListener('click', e => guardando(e.target, runImport));
 
 $('login-btn').addEventListener('click', login);
+$('login-ver').addEventListener('change', e => { $('login-pass').type = e.target.checked ? 'text' : 'password'; });
 $('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 $('logout').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); S = null; showLogin(); });
 

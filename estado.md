@@ -106,6 +106,13 @@ Un solo usuario: `APP_USUARIO` (default "kasa") + `APP_CLAVE`, cookie firmada de
 público; un secreto por defecto permitiría fabricar cookies). Un login fallido
 tarda 0,8 s. No hay bloqueo por intentos.
 
+- Los valores de `APP_USUARIO`, `APP_CLAVE` y `SESSION_SECRET` se limpian de espacios
+  y comillas alrededor (error común al pegarlos en Vercel). La clave tipeada se
+  compara sin espacios en los extremos; el usuario, sin distinguir mayúsculas.
+- `GET /api/diagnostico` (público) dice qué variables están cargadas, sin mostrar
+  valores: usuario configurado, si hay clave, si la clave tenía comillas/espacios,
+  si hay SESSION_SECRET, planilla y el `client_email` de la cuenta de servicio.
+
 ## 4. Migración desde la planilla vieja
 Botón en Configuración: "Ver qué se importaría" (vista previa con avisos) e
 "Importar" (solo con la app vacía). Lee COSTOS, PRODUCCION, INGRESOS Y EGRESOS,

@@ -187,8 +187,9 @@
 <section id="login">
   <div class="panel">
     <h2 class="section">Ingresar</h2>
-    <div class="row"><div class="field"><label for="login-user">Usuario</label><input id="login-user" autocomplete="username"></div></div>
-    <div class="row"><div class="field"><label for="login-pass">Contraseña</label><input id="login-pass" type="password" autocomplete="current-password"></div></div>
+    <div class="row"><div class="field"><label for="login-user">Usuario</label><input id="login-user" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></div></div>
+    <div class="row"><div class="field"><label for="login-pass">Contraseña</label><input id="login-pass" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false"></div></div>
+    <label class="hint" style="display:flex;gap:6px;align-items:center;margin-bottom:10px;"><input type="checkbox" id="login-ver"> Mostrar contraseña</label>
     <button class="btn" id="login-btn">Entrar</button>
     <p class="hint bad" id="login-error" style="margin-top:10px;"></p>
   </div>

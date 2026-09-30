@@ -151,6 +151,10 @@ async function handleApi(req, res, pathname) {
     }
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': auth.sessionCookie(req) });
   }
+  // Diagnóstico de configuración (sin valores secretos): qué variables están cargadas.
+  if (method === 'GET' && pathname === '/api/diagnostico') {
+    return sendJson(res, 200, auth.diagnostico());
+  }
   if (method === 'POST' && pathname === '/api/logout') {
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
   }
