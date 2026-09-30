@@ -714,7 +714,6 @@ function renderPanelResumen(r, rc) {
     kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
     kpi('Resultado (plata real)', fmt(a.resultadoFinal), `ventas − todos los egresos · ${delta(a.resultadoFinal, b.resultadoFinal, true)}`, a.resultadoFinal < 0 ? 'bad' : 'good') +
     kpi('Margen de lo vendido', pct(a.margenTeorico), a.ingresoConCosto ? `cuánto deja cada venta según la receta · ${delta(a.margenTeorico, b.margenTeorico, true, true)}` : 'sin ventas con productos') +
-    kpi('Venta promedio', fmt(a.ticketPromedio), `por venta · ${delta(a.ticketPromedio, b.ticketPromedio, true)}`) +
     kpi('Por cobrar', fmt(pendTotal), 'todas las fechas', pendTotal > 0 ? 'warn' : '') +
     kpi('Stock a precio de venta', fmt(vs.venta), `cuesta ${fmt(vs.costo)} · dejaría ${fmt(vs.gananciaPotencial)}`);
 
@@ -800,7 +799,6 @@ function renderPanelVentas(r) {
   const kpi = (label, value, foot) => `<div class="kpi"><div class="label">${label}</div><div class="value num">${value}</div>${foot ? `<div class="foot">${foot}</div>` : ''}</div>`;
   $('pv-kpis').innerHTML = total
     ? kpi('Ventas', fmt(total.ingreso), `${total.cantVentas} ventas`) +
-      kpi('Venta promedio', fmt(total.cantVentas ? total.ingreso / total.cantVentas : null), 'por venta') +
       kpi('Ganancia según receta', fmt(total.ganancia), total.margen !== null ? `margen de lo vendido ${pct(total.margen)}` : '') +
       kpi('Clientes', new Set(filas.map(f => f.clienteId).filter(Boolean)).size)
     : kpi('Ventas', fmt(0), 'sin ventas en el período');
@@ -889,8 +887,7 @@ function renderPanelResultados(r, rc) {
     kpi('Ventas', fmt(a.ventasTotal), delta(a.ventasTotal, b.ventasTotal, true)) +
     kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
     kpi('Resultado', fmt(a.resultadoFinal), delta(a.resultadoFinal, b.resultadoFinal, true), a.resultadoFinal < 0 ? 'bad' : 'good') +
-    kpi('Margen de lo vendido', pct(a.margenTeorico), delta(a.margenTeorico, b.margenTeorico, true, true)) +
-    kpi('Venta promedio', fmt(a.ticketPromedio), delta(a.ticketPromedio, b.ticketPromedio, true));
+    kpi('Margen de lo vendido', pct(a.margenTeorico), delta(a.margenTeorico, b.margenTeorico, true, true));
 
   // Estado de resultados vertical, con el detalle por categoría dentro de cada grupo.
   const catsDe = (res, grupo) => Object.keys(res.porCategoria).filter(c => Calc.grupoDe(S, c) === grupo);
@@ -1257,28 +1254,68 @@ function ignorarPar(key) {
   const s = paresIgnorados(); s.add(key);
   try { localStorage.setItem('kasa-no-repetidos', JSON.stringify([...s])); } catch { /* sin storage */ }
 }
-function renderRepetidos() {
+// Pares sugeridos por Calc.clientesParecidos. Vienen marcados los que no tienen
+// ambigüedad; queda por defecto el que tiene más ventas (o el nombre más completo).
+function paresRepetidos() {
   const ign = paresIgnorados();
   const pares = Calc.clientesParecidos(S).filter(p => !ign.has(p.a + '|' + p.b));
+  const stats = new Map(Calc.porCliente(S).map(x => [x.clienteId, x]));
+  const cuenta = new Map();
+  pares.forEach(p => [p.a, p.b].forEach(id => cuenta.set(id, (cuenta.get(id) || 0) + 1)));
+  // Dudoso (viene sin marcar): un nombre suelto que calza con varios ("Santi"), con números
+  // ("Anahi 2"), con parentesco ("Papá Cubano", "Amiga Julita") o nombres cortos casi iguales ("Cami"/"Cati").
+  const PARENTESCO = /\b(papa|mama|hijo|hija|hermano|hermana|tio|tia|abuelo|abuela|amigo|amiga|suegro|suegra|primo|prima)\b/;
+  const norm = id => cliNombre(id).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const ambiguo = id => { const n = norm(id); return (!n.includes(' ') && cuenta.get(id) > 1) || /\d/.test(n) || PARENTESCO.test(n); };
+  const palabras = id => norm(id).split(/\s+/).length;
+  const ultima = id => (stats.get(id) || { ultima: '' }).ultima;
+  return pares.map(p => {
+    // queda el nombre más completo; si empatan, el que compró más recientemente
+    const queda = palabras(p.a) !== palabras(p.b) ? (palabras(p.a) > palabras(p.b) ? p.a : p.b)
+      : cliNombre(p.a).length !== cliNombre(p.b).length ? (cliNombre(p.a).length > cliNombre(p.b).length ? p.a : p.b)
+      : (ultima(p.a) >= ultima(p.b) ? p.a : p.b);
+    const cortos = p.motivo === 'casi igual' && Math.min(norm(p.a).length, norm(p.b).length) <= 4;
+    return { ...p, key: p.a + '|' + p.b, queda, ambiguo: ambiguo(p.a) || ambiguo(p.b) || cortos };
+  });
+}
+let repMarcas = new Map();   // key → {marcado, queda}
+function renderRepetidos() {
+  const pares = paresRepetidos();
   $('rep-panel').style.display = pares.length ? '' : 'none';
   if (!pares.length) return;
+  pares.forEach(p => { if (!repMarcas.has(p.key)) repMarcas.set(p.key, { marcado: !p.ambiguo, queda: p.queda }); });
   const stats = new Map(Calc.porCliente(S).map(x => [x.clienteId, x]));
   const info = id => { const x = stats.get(id); return x ? `${x.cantVentas} venta${x.cantVentas === 1 ? '' : 's'}, ${fmt(x.total)}, última ${fDate(x.ultima)}` : 'sin ventas'; };
   const MOT = { 'mismas palabras': 'mismas palabras en otro orden', 'casi igual': 'escritura casi igual', 'nombre incompleto': 'un nombre incompleto' };
-  $('rep-txt').textContent = `${pares.length} pares que podrían ser la misma persona. Unir pasa todas las ventas al que elijas y borra el otro. Revisá antes: pueden ser personas distintas con el mismo nombre.`;
+  const n = pares.filter(p => repMarcas.get(p.key).marcado).length;
+  $('rep-txt').innerHTML = `${pares.length} pares que podrían ser la misma persona. Marcá los que sí lo son y elegí qué nombre queda: al unir, las ventas pasan a ese cliente y el otro se borra. Los <b>dudosos</b> (un nombre suelto que calza con varios) vienen sin marcar. Si no son la misma persona, tocá "No son la misma".`;
+  const opcion = (p, id) => `<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer;"><input type="radio" name="q-${p.key}" data-queda="${p.key}" value="${id}"${repMarcas.get(p.key).queda === id ? ' checked' : ''}><span><b>${esc(cliNombre(id))}</b><div class="hint">${info(id)}</div></span></label>`;
   $('tbl-rep').innerHTML = pares.map(p => `<tr><td>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;">
-      <div><b>${esc(cliNombre(p.a))}</b><div class="hint">${info(p.a)}</div></div>
-      <div><b>${esc(cliNombre(p.b))}</b><div class="hint">${info(p.b)}</div></div>
-      <div class="hint" style="align-self:center;">${MOT[p.motivo] || p.motivo}</div>
-    </div>
-    <div class="actions" style="margin-top:6px;"><button class="btn secondary small" data-unir="${p.b}|${p.a}">Dejar «${esc(cliNombre(p.a))}»</button><button class="btn secondary small" data-unir="${p.a}|${p.b}">Dejar «${esc(cliNombre(p.b))}»</button><button class="btn ghost small" data-norep="${p.a}|${p.b}">No son la misma</button></div>
-  </td></tr>`).join('');
+    <div style="display:flex;gap:10px;align-items:flex-start;">
+      <input type="checkbox" data-marca="${p.key}"${repMarcas.get(p.key).marcado ? ' checked' : ''} aria-label="Unir este par" style="margin-top:4px;">
+      <div style="flex:1;">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">${opcion(p, p.a)}${opcion(p, p.b)}</div>
+        <div class="hint" style="margin-top:4px;">${MOT[p.motivo] || p.motivo}${p.ambiguo ? ' · <span class="warn">dudoso</span>' : ''} · queda el marcado con ● <button class="btn ghost small" data-norep="${p.key}">No son la misma</button></div>
+      </div>
+    </div></td></tr>`).join('');
+  $('rep-unir').textContent = `Unir los marcados (${n})`;
+  $('rep-unir').disabled = !n;
+}
+async function unirMarcados() {
+  const pares = paresRepetidos().filter(p => (repMarcas.get(p.key) || {}).marcado);
+  if (!pares.length) return;
+  const uniones = pares.map(p => { const queda = repMarcas.get(p.key).queda; return { origenId: queda === p.a ? p.b : p.a, destinoId: queda }; });
+  if (!confirm(`¿Unir ${uniones.length} pares de clientes? Las ventas pasan al nombre que queda y los otros se borran.`)) return;
+  const r = await api('POST', '/api/clientes/unir-varios', { uniones });
+  repMarcas = new Map();
+  toast(`Listo: se unieron ${r.clientes} clientes (${r.ventas} ventas reasignadas).`);
 }
 function renderMClientes() {
   renderRepetidos();
   const q = $('c-buscar').value.trim().toLowerCase();
   const stats = new Map(Calc.porCliente(S).map(x => [x.clienteId, x]));
+  const conProd = new Set(S.ventaItems.map(i => i.ventaId));
+  const sinDet = new Set(S.ventas.filter(v => v.clienteId && !conProd.has(v.id)).map(v => v.clienteId));
   const list = S.clientes.filter(c => !q || c.nombre.toLowerCase().includes(q))
     .map(c => ({ c, s: stats.get(c.id) || { cantVentas: 0, total: 0, pendiente: 0, ultima: '' } }))
     .sort((a, b) => b.s.total - a.s.total || a.c.nombre.localeCompare(b.c.nombre));
@@ -1286,7 +1323,7 @@ function renderMClientes() {
       <td>${esc(c.nombre)}${c.tipo === 'Mayorista' ? ' <span class="chip neutral">mayorista</span>' : ''}${c.telefono ? `<div class="hint">${esc(c.telefono)}</div>` : ''}${c.notas ? `<div class="hint">${esc(c.notas)}</div>` : ''}</td>
       <td class="amt num">${s.cantVentas}</td><td class="amt num">${fmt(s.total)}</td><td class="hide-sm num">${fDate(s.ultima)}</td>
       <td class="amt num ${s.pendiente > 0 ? 'warn' : ''}">${s.pendiente > 0 ? fmt(s.pendiente) : '—'}</td>
-      <td class="amt"><button class="btn ghost small" data-editc="${c.id}">Editar</button>${s.cantVentas ? '' : `<button class="btn ghost small" data-borrarc="${c.id}">Borrar</button>`}</td></tr>`).join('')
+      <td class="amt"><button class="btn ghost small" data-editc="${c.id}">Editar</button>${sinDet.has(c.id) ? `<button class="btn ghost small" data-cli-oi="${c.id}" title="Si no es un cliente (ej. un sueldo): sus ventas sin productos pasan a otros ingresos">Ventas → otros ingresos</button>` : ''}${s.cantVentas ? '' : `<button class="btn ghost small" data-borrarc="${c.id}">Borrar</button>`}</td></tr>`).join('')
     || '<tr><td colspan="6" class="empty">No hay clientes.</td></tr>';
 }
 
@@ -1333,7 +1370,20 @@ document.addEventListener('click', async e => {
     }
     return;
   }
-  if (d.norep) { ignorarPar(d.norep); return render(); }
+  if (d.norep) { ignorarPar(d.norep); repMarcas.delete(d.norep); return render(); }
+  if (t.id === 'rep-unir') return guardando(t, unirMarcados);
+  if (d.cliOi) {
+    const c = S.clientes.find(x => x.id === d.cliOi);
+    if (!c) return;
+    const conProd = new Set(S.ventaItems.map(i => i.ventaId));
+    const vs = S.ventas.filter(v => v.clienteId === c.id && !conProd.has(v.id));
+    const concepto = prompt(`«${c.nombre}» no es un cliente: sus ${vs.length} ventas sin productos (${fmt(Calc.sum(vs, v => v.total))}) pasan a otros ingresos.\nConcepto:`, 'Sueldo (otro trabajo)');
+    if (concepto && concepto.trim()) {
+      const r = await api('POST', `/api/clientes/${c.id}/ventas-a-otros-ingresos`, { concepto: concepto.trim() }).catch(() => null);
+      if (r) toast(`${r.movidas} pasadas a otros ingresos.` + (r.quedan ? ` Quedan ${r.quedan} con productos: revisalas en Ventas.` : ''));
+    }
+    return;
+  }
   if (d.aoi) {
     const v = S.ventas.find(x => x.id === d.aoi);
     if (!v) return;
@@ -1571,6 +1621,13 @@ $('mi-guardar').addEventListener('click', e => guardando(e.target, async () => {
 $('c-guardar').addEventListener('click', e => guardando(e.target, guardarCliente));
 $('c-cancelar').addEventListener('click', resetClienteForm);
 $('c-buscar').addEventListener('input', renderMClientes);
+$('tbl-rep').addEventListener('change', e => {
+  const k = e.target.dataset.marca || e.target.dataset.queda;
+  if (!k) return;
+  const m = repMarcas.get(k);
+  if (e.target.dataset.marca) m.marcado = e.target.checked; else { m.queda = e.target.value; m.marcado = true; }
+  renderRepetidos();
+});
 $('fa-guardar').addEventListener('click', e => guardando(e.target, async () => {
   await api('POST', '/api/familias', { nombre: $('fa-nombre').value, tipo: $('fa-tipo').value });
   $('fa-nombre').value = '';

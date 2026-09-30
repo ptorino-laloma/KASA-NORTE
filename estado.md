@@ -12,8 +12,8 @@ esa misma planilla como base de datos (pestañas nuevas "App ...").
 (v3: el Panel es la pantalla de inicio; se sacaron Inicio y Configuración.)
 - **Panel** (período: este mes, mes anterior, este año, año anterior o fechas a
   elección; comparación: período anterior o mismo período del año anterior):
-  - *Resumen*: tarjetas (ventas, egresos, resultado, margen de lo vendido, venta
-    promedio, por cobrar, stock a precio de venta vs. costo) con variación,
+  - *Resumen*: tarjetas (ventas, egresos, resultado, margen de lo vendido, por
+    cobrar, stock a precio de venta vs. costo) con variación,
     "Para mirar" (alertas) y lo más vendido. Muestra una vez el resultado de la
     migración automática.
   - *Ventas*: tabla agrupable por producto, familia, cliente, tipo de cliente y
@@ -37,7 +37,7 @@ esa misma planilla como base de datos (pestañas nuevas "App ...").
 Glosario de las tarjetas:
 - **Margen de lo vendido** (antes "margen teórico"): (precio − costo de receta) /
   precio, sobre lo vendido con productos cargados en el período.
-- **Venta promedio** (antes "ticket promedio"): ventas del período / cantidad de ventas.
+- "Venta promedio" (ticket) se sacó de las tarjetas a pedido (2026-09-30).
 - **Stock a precio de venta**: stock positivo de productos × precio; "dejaría" =
   eso menos su costo de receta.
 
@@ -119,8 +119,15 @@ DIAS_COBERTURA, VENTANA_RITMO).
 ### 3.8 Clientes repetidos y ventas que no eran ventas
 - `Calc.clientesParecidos`: mismas palabras en otro orden, escritura casi igual,
   mismo nombre con apellido parecido, o nombre incompleto. No marca parientes.
-  En Datos maestros → Clientes: "Dejar «X»" une (las ventas pasan a X) o "No son la
-  misma" (se recuerda en ese dispositivo).
+  En Datos maestros → Clientes: cada par con casilla y cuál nombre queda (por
+  defecto el más completo; si empatan, el de compra más reciente) y "Unir los
+  marcados" (`POST /api/clientes/unir-varios`, resuelve cadenas A→B→C). Vienen sin
+  marcar los dudosos: nombre suelto que calza con varios, con números, con
+  parentesco ("Papá …", "Amiga …") o nombres cortos casi iguales. "No son la
+  misma" se recuerda en ese dispositivo.
+- Cliente que no es cliente (ej. un sueldo de otro trabajo cargado como venta):
+  "Ventas → otros ingresos" pasa todas sus ventas SIN productos a otros ingresos;
+  las que tienen productos quedan como ventas para revisar.
 - Ventas sin productos tienen "A otros ingresos" (ej. devolución de un préstamo).
 
 ### 3.9 Migración automática

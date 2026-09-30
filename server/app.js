@@ -52,6 +52,8 @@ const ROUTES = [
   ['DELETE', '/api/familias/:tipo/:nombre', ['familias'], c => routes.deleteFamilia(c.state, c.params.tipo, c.params.nombre)],
 
   ['POST', '/api/clientes', ['clientes'], c => routes.createCliente(c.state, c.body), 201],
+  ['POST', '/api/clientes/unir-varios', ['clientes', 'ventas'], c => routes.unirVariosClientes(c.state, c.body)],
+  ['POST', '/api/clientes/:id/ventas-a-otros-ingresos', ['ventas', 'otrosIngresos'], c => routes.ventasClienteAOtrosIngresos(c.state, c.params.id, c.body)],
   ['POST', '/api/clientes/:id/unir', ['clientes', 'ventas'], c => routes.unirClientes(c.state, c.params.id, c.body)],
   ['PUT', '/api/clientes/:id', ['clientes'], c => routes.updateCliente(c.state, c.params.id, c.body)],
   ['DELETE', '/api/clientes/:id', ['clientes'], c => routes.deleteCliente(c.state, c.params.id)],

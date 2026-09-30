@@ -457,6 +457,35 @@ function unirClientes(state, id, body) {
   return { ventasMovidas: n };
 }
 
+// Varias uniones de una vez. Resuelve cadenas: si A → B y B → C, las ventas de A
+// terminan en C. Se ignoran las que ya no aplican (cliente borrado o unido a sí mismo).
+function unirVariosClientes(state, body) {
+  if (!Array.isArray(body.uniones) || !body.uniones.length) throw new ApiError(400, 'No hay clientes para unir.');
+  const destinoDe = new Map();
+  const final = id => { const vistos = new Set(); while (destinoDe.has(id) && !vistos.has(id)) { vistos.add(id); id = destinoDe.get(id); } return id; };
+  const antes = new Map(state.ventas.map(v => [v.id, v.clienteId]));
+  let clientes = 0;
+  body.uniones.forEach(u => {
+    const o = final(u.origenId), d = final(u.destinoId);
+    if (!o || !d || o === d || !state.clientes.some(c => c.id === o) || !state.clientes.some(c => c.id === d)) return;
+    unirClientes(state, o, { destinoId: d });
+    destinoDe.set(o, d);
+    clientes++;
+  });
+  return { clientes, ventas: state.ventas.filter(v => antes.get(v.id) !== v.clienteId).length };
+}
+
+// Todas las ventas SIN productos de un cliente pasan a otros ingresos (ej. un sueldo que
+// se cargaba como si fuera un cliente). Las que tienen productos quedan como ventas.
+function ventasClienteAOtrosIngresos(state, id, body) {
+  const c = find(state.clientes, id, 'el cliente');
+  const concepto = reqText(body.concepto, 'el concepto', 80);
+  const conProductos = new Set(state.ventaItems.map(i => i.ventaId));
+  const ids = state.ventas.filter(v => v.clienteId === c.id && !conProductos.has(v.id)).map(v => v.id);
+  ids.forEach(vid => ventaAOtroIngreso(state, vid, { concepto }));
+  return { movidas: ids.length, quedan: state.ventas.filter(v => v.clienteId === c.id).length };
+}
+
 /* ---------- categorías de gasto ---------- */
 
 function createCategoriaGasto(state, body) {
@@ -546,7 +575,7 @@ function deleteOtroIngreso(state, id) {
 module.exports = {
   MOTIVOS_AJUSTE, getState,
   createFamilia, updateFamilia, deleteFamilia, asignarFamiliasInsumos,
-  createAjusteInsumo, conteoInsumos, deleteAjusteInsumo, unirClientes, ventaAOtroIngreso, setPagoGasto,
+  createAjusteInsumo, conteoInsumos, deleteAjusteInsumo, unirClientes, ventaAOtroIngreso, setPagoGasto, unirVariosClientes, ventasClienteAOtrosIngresos,
   createOtroIngreso, updateOtroIngreso, deleteOtroIngreso, updateReceta,
   createVenta, updateVenta, setCobro, deleteVenta,
   createGasto, updateGasto, deleteGasto,

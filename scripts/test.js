@@ -260,6 +260,23 @@ test('clientes parecidos y unir', () => {
   assert.ok(!s.clientes.some(c => c.nombre === 'Clari'));
 });
 
+test('unir varios clientes resuelve cadenas; ventas de un cliente a otros ingresos', () => {
+  const { s, pid } = escenario();
+  ['Tomy', 'Tomy Juarez', 'Tomi Juarez', 'Trabajo'].forEach(n => routes.createCliente(s, { nombre: n }));
+  const id = n => s.clientes.find(c => c.nombre === n).id;
+  routes.createVenta(s, { fecha: '2026-09-02', clienteId: id('Tomy'), items: [{ productoId: pid, cantidad: 1, precioUnit: 1 }] });
+  const r = routes.unirVariosClientes(s, { uniones: [{ origenId: id('Tomy'), destinoId: id('Tomy Juarez') }, { origenId: id('Tomy Juarez'), destinoId: id('Tomi Juarez') }] });
+  assert.deepEqual(r, { clientes: 2, ventas: 1 });
+  assert.equal(s.ventas[0].clienteId, id('Tomi Juarez'));
+  const t = id('Trabajo');
+  s.ventas.push({ id: 'g1', fecha: '2026-05-17', clienteId: t, total: 490000, estadoPago: 'pagado', medioPago: null, nota: null, creado: '' });
+  s.ventas.push({ id: 'g2', fecha: '2026-07-20', clienteId: t, total: 131000, estadoPago: 'pagado', medioPago: null, nota: null, creado: '' });
+  routes.createVenta(s, { fecha: '2026-03-27', clienteId: t, items: [{ productoId: pid, cantidad: 1, precioUnit: 1 }] });
+  const m = routes.ventasClienteAOtrosIngresos(s, t, { concepto: 'Sueldo (otro trabajo)' });
+  assert.deepEqual(m, { movidas: 2, quedan: 1 });
+  assert.equal(Calc.sum(s.otrosIngresos, o => o.monto), 621000);
+});
+
 test('venta sin productos pasa a otros ingresos', () => {
   const { s, pid } = escenario();
   s.ventas.push({ id: 'v1', fecha: '2026-06-12', clienteId: null, total: 100000, estadoPago: 'pagado', medioPago: 'Transferencia', nota: 'prestamo', creado: '' });
