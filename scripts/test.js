@@ -189,6 +189,21 @@ test('panel costos: total por producto y reparto por insumo cierran igual', () =
   assert.equal(carneRow.consumo, 6); // 2 tandas × 3 kg
 });
 
+test('familia sugerida de insumos y asignación masiva', () => {
+  const fams = ['Carnes', 'Verdulería', 'Lácteos y fiambres', 'Masas', 'Almacén', 'Reventa', 'Packaging', 'Mano de obra y servicios'];
+  const casos = { 'Carne molida': 'Carnes', 'Pollo': 'Carnes', 'Jamón ': 'Lácteos y fiambres', 'Queso cremoso': 'Lácteos y fiambres',
+    'Cebolla': 'Verdulería', 'champi': 'Verdulería', 'Masas copetin': 'Masas', 'Prepizza': 'Masas', 'Sorrentino JyQ': 'Reventa',
+    'Ñoquis': 'Reventa', 'Film ($10200/300mts)': 'Packaging', 'Bandeja 103': 'Packaging', 'Hs de Trabajo': 'Mano de obra y servicios',
+    'Luz/Gas': 'Mano de obra y servicios', 'Pimenton': 'Almacén', 'Sal': 'Almacén', 'Salsa de tomate': 'Almacén', 'Huevo ': 'Almacén',
+    'Pan rallado': 'Almacén', 'Caldo hongos': 'Almacén', 'Cosa rara': null };
+  Object.entries(casos).forEach(([n, f]) => assert.equal(Calc.familiaSugerida(n, fams), f, n));
+  assert.equal(Calc.familiaSugerida('Pollo', ['Almacén']), null); // si la familia no existe, no se propone
+  const { s, carne } = escenario();
+  routes.asignarFamiliasInsumos(s, { asignaciones: [{ insumoId: carne.id, familia: 'Carnes' }] });
+  assert.equal(s.insumos[0].familia, 'Carnes');
+  assert.throws(() => routes.asignarFamiliasInsumos(s, { asignaciones: [{ insumoId: carne.id, familia: 'Nada' }] }), /no existe/);
+});
+
 // Planilla de ejemplo con la misma forma que las pestañas reales (datos inventados).
 const serial = iso => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000 + 25569);
 function planillaEjemplo() {

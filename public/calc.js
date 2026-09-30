@@ -133,6 +133,30 @@
     return state.productos.filter(p => ids.has(p.id));
   }
 
+  /* ---------- familia sugerida de un insumo ---------- */
+
+  // Reglas por palabra clave (se prueban en orden; gana la primera). Son una
+  // PROPUESTA: la app la muestra para revisar antes de aplicar, y en la importación
+  // queda avisado. Los nombres tienen que coincidir con las familias por defecto.
+  const REGLAS_FAMILIA = [
+    ['Mano de obra y servicios', /\b(hs|horas?) de trabajo|luz|gas\b|mano de obra/],
+    ['Packaging', /film|bandeja|pote|etiqueta|bolsa|caja de|descartable|envase|papel/],
+    ['Reventa', /sorrentin|noqui|arrollado|ravio|canelon|tapa de/],
+    ['Masas', /masa|prepizza|tapa|pionono/],
+    ['Lácteos y fiambres', /queso|muzza|mozza|roquefort|cheddar|crema|jamon|leche|manteca|ricota|fiambre|salame/],
+    // elaborados de almacén antes que verdulería ("Caldo de hongos", "Salsa de tomate")
+    ['Almacén', /caldo|salsa|ralladura|pure|conserva|enlatad/],
+    ['Carnes', /carne|\bpollo|cerdo|bondiola|panceta|chorizo|milanesa|molida|vacuna|pescado|atun|matambre/],
+    ['Verdulería', /cebolla|pimiento|morron|zanahoria|choclo|zapallo|champi|hongo|tomate|limon|berenjena|verdeo|remolacha|batata|repollo|papa|ajo\b|puerro|espinaca|acelga|lechuga|zucchini|calabaza|apio|perejil|arveja/],
+    ['Almacén', /sal\b|pimenton|aji|caldo|vino|azucar|aceite|salsa|lenteja|poroto|maiz|aceituna|oregano|mostaza|salvado|pan rallado|cerveza|grasa|agua|huevo|harina|arroz|vinagre|especia|comino|ralladura|levadura/]
+  ];
+  function familiaSugerida(nombre, familiasExistentes) {
+    const n = String(nombre || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const r = REGLAS_FAMILIA.find(([, re]) => re.test(n));
+    if (!r) return null;
+    return !familiasExistentes || familiasExistentes.includes(r[0]) ? r[0] : null;
+  }
+
   /* ---------- stock ---------- */
 
   // Stock de productos terminados = producido − vendido + ajustes.
@@ -379,7 +403,7 @@
 
   const api = {
     sum, round2, byId, groupBy, indices, rangoMes, rangoAnio, enRango, finMes, sumarMeses, rangoAnterior, rangoAnioAnterior,
-    ventasFilas, agrupar, costosProduccion, tendencia,
+    ventasFilas, agrupar, costosProduccion, tendencia, familiaSugerida,
     costoProducto, costosTodos, precioSugerido, margen, productosQueUsan,
     stock, grupoDe, resumen, porProducto, porCliente, porMes
   };

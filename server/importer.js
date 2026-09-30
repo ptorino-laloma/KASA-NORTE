@@ -351,7 +351,13 @@ function importar(raw, { hoy } = {}) {
   const familias = [];
   productos.forEach(p => { if (p.categoria && !familias.some(f => f.tipo === 'producto' && f.nombre === p.categoria)) familias.push({ nombre: p.categoria, tipo: 'producto' }); });
   DEFAULT_FAMILIAS_INSUMO.forEach(n => familias.push({ nombre: n, tipo: 'insumo' }));
-  aviso('Insumos', 'Los insumos quedan sin familia (la planilla no la tenía): se asignan en Datos maestros → Insumos.');
+  // La planilla no tenía familia de insumo: se propone una por palabra clave (revisable).
+  const famIns = familias.filter(f => f.tipo === 'insumo').map(f => f.nombre);
+  let propuestas = 0;
+  insumos.forEach(i => { i.familia = Calc.familiaSugerida(i.nombre, famIns); if (i.familia) propuestas++; });
+  const sinFam = insumos.filter(i => !i.familia).map(i => i.nombre);
+  aviso('Insumos', `La planilla no tenía familia de insumos: se propuso una automáticamente para ${propuestas} (por el nombre). Revisalas en Datos maestros → Insumos.` +
+    (sinFam.length ? ` Quedaron sin familia: ${sinFam.join(', ')}.` : ''));
 
   const st = { insumos, productos, recetas, producciones, ventas, ventaItems, gastos, ajustes, clientes, categoriasGasto, familias, otrosIngresos: [] };
   const costos_ = Calc.costosTodos(st);

@@ -570,6 +570,18 @@
 
     <!-- Insumos -->
     <div id="dm-insumos" style="display:none;">
+      <div class="panel" id="mi-prop-panel" style="display:none;">
+        <h2 class="section">Insumos sin familia</h2>
+        <p class="hint" style="margin-bottom:10px;" id="mi-prop-txt"></p>
+        <button class="btn mostaza" id="mi-prop-ver">Proponer familias</button>
+        <div id="mi-prop-box" style="display:none;">
+          <div class="table-wrap"><table>
+            <thead><tr><th>Insumo</th><th>Familia propuesta</th></tr></thead>
+            <tbody id="tbl-mi-prop"></tbody>
+          </table></div>
+          <div class="actions" style="margin-top:10px;"><button class="btn" id="mi-prop-aplicar">Aplicar</button><button class="btn secondary" id="mi-prop-cancelar">Cancelar</button></div>
+        </div>
+      </div>
       <div class="panel">
         <h2 class="section">Nuevo insumo</h2>
         <div class="row">

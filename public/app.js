@@ -1026,7 +1026,32 @@ async function guardarMProducto() {
   }
 }
 
+// Propuesta automática de familia para insumos que no tienen (reglas en calc.js), revisable antes de aplicar.
+let miPropAbierta = false;
+function renderPropuestaFamilias() {
+  const sin = S.insumos.filter(i => !i.familia).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  $('mi-prop-panel').style.display = sin.length ? '' : 'none';
+  if (!sin.length) { miPropAbierta = false; return; }
+  $('mi-prop-txt').textContent = `${sin.length} insumo${sin.length === 1 ? '' : 's'} sin familia. Te propongo una según el nombre; revisala y cambiá lo que no corresponda antes de aplicar.`;
+  $('mi-prop-ver').style.display = miPropAbierta ? 'none' : '';
+  $('mi-prop-box').style.display = miPropAbierta ? '' : 'none';
+  if (!miPropAbierta) return;
+  const fams = familias('insumo');
+  $('tbl-mi-prop').innerHTML = sin.map(i => {
+    const sug = Calc.familiaSugerida(i.nombre, fams);
+    return `<tr><td>${esc(i.nombre)}</td><td><select class="inline" data-prop="${i.id}" style="width:auto;"><option value="">— dejar sin familia —</option>${fams.map(f => `<option${f === sug ? ' selected' : ''}>${esc(f)}</option>`).join('')}</select></td></tr>`;
+  }).join('');
+}
+async function aplicarPropuesta() {
+  const asignaciones = [...document.querySelectorAll('[data-prop]')].filter(s => s.value).map(s => ({ insumoId: s.dataset.prop, familia: s.value }));
+  if (!asignaciones.length) return toast('No elegiste ninguna familia.', true);
+  miPropAbierta = false;
+  await api('POST', '/api/insumos/familias', { asignaciones });
+  toast(`Familia asignada a ${asignaciones.length} insumo${asignaciones.length === 1 ? '' : 's'}.`);
+}
+
 function renderMInsumos() {
+  renderPropuestaFamilias();
   const q = $('mi-buscar').value.trim().toLowerCase(), fam = $('mi-filtro-fam').value;
   const usos = new Map();
   S.recetas.forEach(l => usos.set(l.insumoId, (usos.get(l.insumoId) || 0) + 1));
@@ -1332,6 +1357,9 @@ $('mp-borrar').addEventListener('click', e => guardando(e.target, async () => {
   toast('Producto borrado.');
 }));
 $('mi-buscar').addEventListener('input', renderMInsumos);
+$('mi-prop-ver').addEventListener('click', () => { miPropAbierta = true; renderPropuestaFamilias(); });
+$('mi-prop-cancelar').addEventListener('click', () => { miPropAbierta = false; renderPropuestaFamilias(); });
+$('mi-prop-aplicar').addEventListener('click', e => guardando(e.target, aplicarPropuesta));
 $('mi-filtro-fam').addEventListener('change', renderMInsumos);
 $('tbl-mi').addEventListener('change', e => {
   if (e.target.dataset.costo) guardarPrecioInsumo(e.target).catch(() => {});

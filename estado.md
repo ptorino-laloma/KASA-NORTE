@@ -44,6 +44,8 @@ esa misma planilla como base de datos (pestañas nuevas "App ...").
   al recetario. *Insumos* (familia y precio editables en la tabla). *Clientes*.
   *Familias* de productos y de insumos (renombrar actualiza todo; no se borra si
   se usa).
+  Si hay insumos sin familia aparece **"Proponer familias"**: sugiere una por
+  palabra clave (`familiaSugerida` en `calc.js`), se revisa y se aplica de una.
 - **Configuración**: categorías de egresos y su grupo, importación de la planilla vieja.
 
 ### Marca
@@ -127,6 +129,9 @@ Decisiones:
 - La app usa siempre el precio de la lista de insumos, aunque en alguna receta la
   planilla tuviera otro número escrito a mano.
 - Reventa detectada si la receta es un solo insumo con el mismo nombre del producto.
+- Familia de insumo propuesta por palabra clave con las mismas reglas del botón
+  (la planilla no la tenía). Con los datos reales clasifica los 71 insumos; se
+  revisa en Datos maestros → Insumos.
 - Unidad de venta por categoría (Empanadas → docena, Pastas → caja, Pizzas y
   hamburguesas → unidad, resto → porción). Se cambia en el editor.
 - Nombres unificados sin distinguir mayúsculas/acentos/espacios dobles, más dos
@@ -188,7 +193,6 @@ Lo que se encontró en la planilla (a revisar con la dueña):
 
 ## 7. Pendientes / ideas
 - Deploy en Vercel + compartir la planilla con la cuenta de servicio + importar.
-- Asignar familia a los insumos importados (quedan sin familia).
 - Reemplazar el logo redibujado por el archivo original si aparece.
 - Conteo físico inicial de stock.
 - Stock de **insumos** (hoy solo de productos terminados). Requiere cargar las

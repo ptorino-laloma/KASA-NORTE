@@ -27,6 +27,7 @@ const ROUTES = [
   ['POST', '/api/stock/conteo', ['ajustes'], c => routes.conteoStock(c.state, c.body), 201],
   ['DELETE', '/api/ajustes/:id', ['ajustes'], c => routes.deleteAjuste(c.state, c.params.id)],
 
+  ['POST', '/api/insumos/familias', ['insumos'], c => routes.asignarFamiliasInsumos(c.state, c.body)],
   ['POST', '/api/insumos', ['insumos'], c => routes.createInsumo(c.state, c.body), 201],
   ['PUT', '/api/insumos/:id', ['insumos'], c => routes.updateInsumo(c.state, c.params.id, c.body)],
   ['DELETE', '/api/insumos/:id', ['insumos'], c => routes.deleteInsumo(c.state, c.params.id)],

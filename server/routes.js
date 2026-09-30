@@ -233,6 +233,16 @@ function deleteInsumo(state, id) {
   remove(state.insumos, id, 'el insumo');
 }
 
+// Asignación de familia a varios insumos de una vez (propuesta automática revisada).
+function asignarFamiliasInsumos(state, body) {
+  if (!Array.isArray(body.asignaciones) || !body.asignaciones.length) throw new ApiError(400, 'No hay nada para asignar.');
+  body.asignaciones.forEach(a => {
+    const ins = find(state.insumos, a.insumoId, 'un insumo');
+    ins.familia = optFamilia(state, a.familia, 'insumo');
+  });
+  return { asignados: body.asignaciones.length };
+}
+
 /* ---------- productos y recetas ---------- */
 
 function datosProducto(state, body, id) {
@@ -429,7 +439,7 @@ function deleteOtroIngreso(state, id) {
 
 module.exports = {
   MOTIVOS_AJUSTE, getState,
-  createFamilia, updateFamilia, deleteFamilia,
+  createFamilia, updateFamilia, deleteFamilia, asignarFamiliasInsumos,
   createOtroIngreso, updateOtroIngreso, deleteOtroIngreso, updateReceta,
   createVenta, updateVenta, setCobro, deleteVenta,
   createGasto, updateGasto, deleteGasto,
