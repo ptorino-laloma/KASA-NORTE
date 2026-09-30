@@ -85,6 +85,13 @@ function diagnostico() {
   try { cuentaServicio = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').client_email || null; } catch { /* inválido */ }
   return {
     entorno: isProd() ? 'vercel' : 'local',
+    // production / preview: las variables de Vercel se cargan por entorno; si solo
+    // están en "Production", un link de Preview no las ve.
+    vercelEnv: process.env.VERCEL_ENV || null,
+    commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
+    rama: process.env.VERCEL_GIT_COMMIT_REF || null,
+    // largo (no el valor) de la clave ya limpia, para comparar con la que se tipea
+    claveLargo: envLimpio('APP_CLAVE').length,
     usuario: usuario(),
     clave: !!envLimpio('APP_CLAVE'),
     claveTieneComillasOEspacios: String(process.env.APP_CLAVE || '') !== envLimpio('APP_CLAVE'),
