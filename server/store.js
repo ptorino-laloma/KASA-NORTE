@@ -14,6 +14,9 @@
 //   categoriasGasto: [{ nombre, grupo }]
 //   familias:        [{ nombre, tipo: 'producto'|'insumo' }]
 //   otrosIngresos:   [{ id, fecha, concepto, monto, medioPago, nota, creado }]   (lo que entra y no es venta)
+//   compraItems:     [{ id, gastoId, insumoId, cantidad, precioUnit }]   (detalle opcional de un egreso: suma stock de insumos)
+//   ajustesInsumo:   [{ id, fecha, insumoId, cantidad (+/-), motivo, nota, creado }]
+//   producciones[].consumo: [{ insumoId, cantidad }] descontado del stock de insumos (null en lo importado)
 //
 // Backend según entorno:
 //   - GOOGLE_SHEET_ID definido → Google Sheets (producción, ver store-sheets.js)
@@ -36,7 +39,7 @@ function noSheet() {
   throw new ApiError(500, 'Falta configurar la planilla de Google (GOOGLE_SHEET_ID y GOOGLE_SERVICE_ACCOUNT_JSON) en Vercel.');
 }
 
-const TABLES = ['insumos', 'productos', 'recetas', 'producciones', 'ventas', 'ventaItems', 'gastos', 'ajustes', 'clientes', 'categoriasGasto', 'familias', 'otrosIngresos'];
+const TABLES = ['insumos', 'productos', 'recetas', 'producciones', 'ventas', 'ventaItems', 'gastos', 'ajustes', 'clientes', 'categoriasGasto', 'familias', 'otrosIngresos', 'compraItems', 'ajustesInsumo'];
 
 function emptyState() {
   const s = {};

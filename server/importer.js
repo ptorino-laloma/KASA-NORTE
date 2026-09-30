@@ -256,7 +256,7 @@ function importar(raw, { hoy } = {}) {
       if (!f || !(q > 0)) { aviso('Producción', `Fila ${r + 1}: falta la fecha o la cantidad, se saltea.`); continue; }
       const p = productoPara(row[cS], 'Producción');
       if (hoy && f > hoy) futuras.push(`${f} ${p.nombre}`);
-      producciones.push({ id: uid(), fecha: f, productoId: p.id, cantidad: q, costoUnit: null, nota: clean(row[cO]) || null, creado: '' });
+      producciones.push({ id: uid(), fecha: f, productoId: p.id, cantidad: q, costoUnit: null, nota: clean(row[cO]) || null, creado: '', consumo: null });
     }
   }
   if (futuras.length) aviso('Producción', `${futuras.length} tandas tienen fecha futura (¿2025 tipeado como 2026?): ${futuras.join('; ')}. Se importan tal cual; revisalas.`);
@@ -359,7 +359,7 @@ function importar(raw, { hoy } = {}) {
   aviso('Insumos', `La planilla no tenía familia de insumos: se propuso una automáticamente para ${propuestas} (por el nombre). Revisalas en Datos maestros → Insumos.` +
     (sinFam.length ? ` Quedaron sin familia: ${sinFam.join(', ')}.` : ''));
 
-  const st = { insumos, productos, recetas, producciones, ventas, ventaItems, gastos, ajustes, clientes, categoriasGasto, familias, otrosIngresos: [] };
+  const st = { insumos, productos, recetas, producciones, ventas, ventaItems, gastos, ajustes, clientes, categoriasGasto, familias, otrosIngresos: [], compraItems: [], ajustesInsumo: [] };
   const costos_ = Calc.costosTodos(st);
   const cu = id => { const c = costos_.get(id); return c && c.costoUnit !== null ? Calc.round2(c.costoUnit) : null; };
   producciones.forEach(p => { p.costoUnit = cu(p.productoId); });

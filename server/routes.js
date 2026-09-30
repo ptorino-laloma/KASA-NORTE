@@ -134,18 +134,53 @@ function datosGasto(state, body) {
   };
 }
 
+// Detalle opcional de compra: qué insumos se compraron. Suma al stock de insumos y,
+// con actualizarPrecios, deja el precio de cada insumo en el de esta compra (así el
+// costeo de las recetas queda al día solo). Si hay detalle, el monto es la suma.
+function parseCompra(state, items) {
+  if (items === undefined || items === null) return [];
+  if (!Array.isArray(items)) throw new ApiError(400, 'El detalle de compra no es válido.');
+  if (items.length > 60) throw new ApiError(400, 'Demasiados renglones en la compra.');
+  return items.map(it => {
+    const ins = find(state.insumos, it.insumoId, 'un insumo de la compra');
+    return {
+      insumoId: ins.id,
+      cantidad: reqNum(it.cantidad, `La cantidad de ${ins.nombre}`),
+      precioUnit: reqNum(it.precioUnit, `El precio de ${ins.nombre}`, { allowZero: true })
+    };
+  });
+}
+
+function guardarCompra(state, gasto, items, actualizarPrecios) {
+  state.compraItems = state.compraItems.filter(i => i.gastoId !== gasto.id);
+  items.forEach(i => state.compraItems.push({ id: uid(), gastoId: gasto.id, ...i }));
+  if (items.length) gasto.monto = Calc.round2(Calc.sum(items, i => i.cantidad * i.precioUnit));
+  if (actualizarPrecios) {
+    items.forEach(i => {
+      const ins = state.insumos.find(x => x.id === i.insumoId);
+      if (ins && i.precioUnit > 0 && ins.costo !== i.precioUnit) { ins.costo = i.precioUnit; ins.actualizado = gasto.fecha; }
+    });
+  }
+}
+
 function createGasto(state, body) {
-  const g = { id: uid(), ...datosGasto(state, body), creado: now() };
+  const items = parseCompra(state, body.items);
+  const g = { id: uid(), ...datosGasto(state, { ...body, monto: items.length ? 1 : body.monto }), creado: now() };
   state.gastos.push(g);
+  guardarCompra(state, g, items, body.actualizarPrecios !== false);
   return { id: g.id };
 }
 
 function updateGasto(state, id, body) {
-  Object.assign(find(state.gastos, id, 'el gasto'), datosGasto(state, body));
+  const g = find(state.gastos, id, 'el gasto');
+  const items = parseCompra(state, body.items);
+  Object.assign(g, datosGasto(state, { ...body, monto: items.length ? 1 : body.monto }));
+  guardarCompra(state, g, items, body.actualizarPrecios === true);
 }
 
 function deleteGasto(state, id) {
   remove(state.gastos, id, 'el gasto');
+  state.compraItems = state.compraItems.filter(i => i.gastoId !== id);
 }
 
 /* ---------- producción y stock ---------- */
@@ -153,11 +188,13 @@ function deleteGasto(state, id) {
 function createProduccion(state, body) {
   const p = find(state.productos, body.productoId, 'el producto');
   const costo = Calc.costoProducto(state, p.id).costoUnit;
+  const cantidad = reqNum(body.cantidad, 'La cantidad');
   const prod = {
-    id: uid(), fecha: reqDate(body.fecha), productoId: p.id,
-    cantidad: reqNum(body.cantidad, 'La cantidad'),
+    id: uid(), fecha: reqDate(body.fecha), productoId: p.id, cantidad,
     costoUnit: costo === null ? null : Calc.round2(costo),
-    nota: optText(body.nota), creado: now()
+    nota: optText(body.nota), creado: now(),
+    // lo que esta producción descuenta del stock de insumos (con la receta de hoy)
+    consumo: Calc.consumoDe(state, p.id, cantidad)
   };
   state.producciones.push(prod);
   return { id: prod.id };
@@ -197,6 +234,38 @@ function conteoStock(state, body) {
   return { ajustes: creados };
 }
 
+function createAjusteInsumo(state, body) {
+  const ins = find(state.insumos, body.insumoId, 'el insumo');
+  const a = {
+    id: uid(), fecha: reqDate(body.fecha), insumoId: ins.id,
+    cantidad: reqNum(body.cantidad, 'La cantidad', { allowNegative: true }),
+    motivo: oneOf(body.motivo, MOTIVOS_AJUSTE, 'El motivo'),
+    nota: optText(body.nota), creado: now()
+  };
+  state.ajustesInsumo.push(a);
+  return { id: a.id };
+}
+
+function conteoInsumos(state, body) {
+  const fecha = reqDate(body.fecha);
+  if (!Array.isArray(body.conteos) || !body.conteos.length) throw new ApiError(400, 'No hay nada contado.');
+  const st = Calc.stockInsumos(state, fecha);
+  let creados = 0;
+  body.conteos.forEach(c => {
+    const ins = find(state.insumos, c.insumoId, 'el insumo');
+    const real = reqNum(c.stockReal, `El stock de ${ins.nombre}`, { allowZero: true });
+    const dif = Math.round((real - (st.get(ins.id) || { stock: 0 }).stock) * 1000) / 1000;
+    if (dif === 0) return;
+    state.ajustesInsumo.push({ id: uid(), fecha, insumoId: ins.id, cantidad: dif, motivo: 'Conteo', nota: optText(body.nota), creado: now() });
+    creados++;
+  });
+  return { ajustes: creados };
+}
+
+function deleteAjusteInsumo(state, id) {
+  remove(state.ajustesInsumo, id, 'el ajuste');
+}
+
 function deleteAjuste(state, id) {
   remove(state.ajustes, id, 'el ajuste');
 }
@@ -208,7 +277,7 @@ function datosInsumo(state, body, id) {
   checkUnico(state.insumos, nombre, id, 'un insumo');
   return {
     nombre, familia: optFamilia(state, body.familia, 'insumo'), unidad: optText(body.unidad, 20),
-    costo: optNum(body.costo, 'El costo'), notas: optText(body.notas)
+    costo: optNum(body.costo, 'El costo'), notas: optText(body.notas), stockMinimo: optNum(body.stockMinimo, 'El stock mínimo')
   };
 }
 
@@ -230,6 +299,9 @@ function deleteInsumo(state, id) {
   find(state.insumos, id, 'el insumo');
   const usan = Calc.productosQueUsan(state, id);
   if (usan.length) throw new ApiError(400, `No se puede borrar: lo usan ${usan.map(p => p.nombre).join(', ')}.`);
+  if (state.compraItems.some(i => i.insumoId === id) || state.ajustesInsumo.some(a => a.insumoId === id)) {
+    throw new ApiError(400, 'Tiene compras o ajustes de stock cargados: no se puede borrar.');
+  }
   remove(state.insumos, id, 'el insumo');
 }
 
@@ -440,6 +512,7 @@ function deleteOtroIngreso(state, id) {
 module.exports = {
   MOTIVOS_AJUSTE, getState,
   createFamilia, updateFamilia, deleteFamilia, asignarFamiliasInsumos,
+  createAjusteInsumo, conteoInsumos, deleteAjusteInsumo,
   createOtroIngreso, updateOtroIngreso, deleteOtroIngreso, updateReceta,
   createVenta, updateVenta, setCobro, deleteVenta,
   createGasto, updateGasto, deleteGasto,

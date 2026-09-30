@@ -9,44 +9,37 @@ control y estado de resultados. Reemplaza la planilla de Google "KASA NORTE" y u
 esa misma planilla como base de datos (pestañas nuevas "App ...").
 
 ## 2. Pantallas
-- **Inicio**: KPIs del mes (ventas, egresos, resultado, margen teórico, por
-  cobrar), alertas (stock negativo/bajo mínimo, productos sin costo o sin precio,
-  precio bajo el costo, insumos sin familia, ventas sin detalle, egresos a pagar)
-  y lo más vendido.
-- **Ingresos** → *Ventas*: una venta = cliente + varios productos. Precio
-  automático (mayorista si corresponde), editable. Muestra stock. Cobrada o
-  pendiente, medio de pago. Cliente nuevo por nombre → se crea al guardar.
-  → *Otros ingresos*: lo que entra y no es venta (préstamo, aporte). Suma al
-  resultado final, separado de las ventas.
-- **Egresos**: fecha, categoría, monto, medio, pagado/a pagar, proveedor, detalle.
-- **Producción**: cantidad en unidades de venta; muestra costo por unidad, costo
-  productivo y tandas antes de guardar; congela el costo; suma al stock.
-- **Stock**: calculado; ajustes manuales y **conteo físico**.
+(v3: el Panel es la pantalla de inicio; se sacaron Inicio y Configuración.)
 - **Panel** (período: este mes, mes anterior, este año, año anterior o fechas a
   elección; comparación: período anterior o mismo período del año anterior):
+  - *Resumen*: tarjetas (ventas, egresos, resultado, margen de lo vendido, venta
+    promedio, por cobrar, stock a precio de venta vs. costo) con variación,
+    "Para mirar" (alertas) y lo más vendido. Muestra una vez el resultado de la
+    migración automática.
   - *Ventas*: tabla agrupable por producto, familia, cliente, tipo de cliente y
-    mes (combinables), grupos que se abren con el detalle, filtro, exportar a
-    Excel (CSV con `;` y coma decimal). Muestra 40 grupos y "ver más".
-  - *Costos*: costo productivo total del período, con chips **Por insumo**
-    (agrupado por familia, con consumo) y **Por producto terminado**; compras de
-    mercadería al lado para comparar; exportar.
-  - *Estado de resultados*: tarjetas con variación contra la comparación, gráfico
-    de tendencia (6 meses en el celular, 12 en pantalla ancha) con etiquetas y
-    tooltip, estado de resultados vertical (ventas → mercadería → margen bruto →
-    fijos → otros → resultado operativo → otros ingresos → resultado final, con
-    detalle por categoría) y tabla mes a mes.
-- **Recetario**: se elige el producto, se define unidad de venta y rinde, se
-  cargan insumos y cantidades; calcula en vivo costo de tanda, costo por unidad,
-  sugerido y margen. "Copiar receta de…" otro producto. Lista de todas las
-  recetas con su estado.
-- **Datos maestros** → *Productos* (nombre, familia, tipo, precio con botón "Usar
-  sugerido", recargo, mayorista, stock mínimo, activo); al crear uno nuevo lleva
-  al recetario. *Insumos* (familia y precio editables en la tabla). *Clientes*.
-  *Familias* de productos y de insumos (renombrar actualiza todo; no se borra si
-  se usa).
-  Si hay insumos sin familia aparece **"Proponer familias"**: sugiere una por
-  palabra clave (`familiaSugerida` en `calc.js`), se revisa y se aplica de una.
-- **Configuración**: categorías de egresos y su grupo, importación de la planilla vieja.
+    mes (combinables), grupos que se abren, filtro, exportar a Excel (CSV).
+  - *Costos*: costo productivo total con chips Por insumo / Por producto terminado.
+  - *Resultados*: tarjetas con variación, gráfico de tendencia, estado de
+    resultados vertical y tabla mes a mes.
+- **Ingresos** → *Ventas* y *Otros ingresos* (lo que entra y no es venta).
+- **Egresos**: categoría, monto, medio, estado, proveedor, detalle. **Detalle de
+  compra opcional** (insumo, cantidad, precio): suma al stock de insumos, el monto
+  pasa a ser la suma, y con la casilla tildada actualiza el precio de cada insumo.
+- **Producción**: cantidad en unidad de venta; congela costo y descuenta los
+  insumos de la receta.
+- **Stock** → *Productos terminados* y *Insumos* (comprado − usado ± ajustes,
+  mínimo editable, conteo físico y ajustes). La familia "Mano de obra y
+  servicios" no lleva stock.
+- **Recetario**: unidad de venta, rinde, insumos y costo en vivo; copiar receta.
+- **Datos maestros**: Productos, Insumos (con "Proponer familias"), Clientes,
+  Familias y **Categorías de egresos** (antes en Configuración).
+
+Glosario de las tarjetas:
+- **Margen de lo vendido** (antes "margen teórico"): (precio − costo de receta) /
+  precio, sobre lo vendido con productos cargados en el período.
+- **Venta promedio** (antes "ticket promedio"): ventas del período / cantidad de ventas.
+- **Stock a precio de venta**: stock positivo de productos × precio; "dejaría" =
+  eso menos su costo de receta.
 
 ### Marca
 Colores tomados del logo y los posts de Instagram (bordó `#6B0512`, rojo
@@ -100,7 +93,19 @@ sin productos (solo monto) no descuenta stock.
   producción; la apertura por insumo reparte ese total según la receta **actual**
   (la suma cierra igual). Producciones sin costo no suman y se avisa.
 
-### 3.6 Ingreso
+### 3.6 Stock de insumos
+- Stock = comprado (detalle de compra de egresos) − consumido (producciones) + ajustes.
+- Cada producción guarda en `consumo` lo que descontó (tandas × receta de ese
+  momento). Las producciones importadas no tienen `consumo`: la planilla vieja no
+  tenía compras por insumo, así que el stock de insumos arranca con un conteo.
+- Editar un egreso no vuelve a tocar precios salvo que se tilde la casilla.
+
+### 3.7 Migración automática
+Al abrir la app (GET /api/state) con la base vacía (sin insumos, productos,
+producciones, ventas, egresos, clientes ni otros ingresos) se importan solas las
+pestañas viejas y se guarda todo. Si no existen, no hace nada. Ya no hay botón.
+
+### 3.8 Ingreso
 Un solo usuario: `APP_USUARIO` (default "kasa") + `APP_CLAVE`, cookie firmada de
 60 días. En Vercel `APP_CLAVE` y `SESSION_SECRET` son obligatorias (el repo es
 público; un secreto por defecto permitiría fabricar cookies). Un login fallido
@@ -114,8 +119,8 @@ tarda 0,8 s. No hay bloqueo por intentos.
   si hay SESSION_SECRET, planilla y el `client_email` de la cuenta de servicio.
 
 ## 4. Migración desde la planilla vieja
-Botón en Configuración: "Ver qué se importaría" (vista previa con avisos) e
-"Importar" (solo con la app vacía). Lee COSTOS, PRODUCCION, INGRESOS Y EGRESOS,
+Automática la primera vez (ver 3.7); el resumen y los avisos se muestran una vez
+en Panel → Resumen. Lee COSTOS, PRODUCCION, INGRESOS Y EGRESOS,
 CLIENTES y Base de datos **sin modificarlas**. Columnas ubicadas por encabezado.
 
 Probado con un export del 2026-09-30 (datos ene–ago 2026):

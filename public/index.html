@@ -196,45 +196,16 @@
 </section>
 
 <nav class="tabs">
-  <button data-tab="inicio">Inicio</button>
+  <button data-tab="panel">Panel</button>
   <button data-tab="ingresos">Ingresos</button>
   <button data-tab="egresos">Egresos</button>
   <button data-tab="produccion">Producción</button>
   <button data-tab="stock">Stock</button>
-  <button data-tab="panel">Panel</button>
   <button data-tab="recetario">Recetario</button>
   <button data-tab="maestros">Datos maestros</button>
-  <button data-tab="config">Configuración</button>
 </nav>
 
 <main>
-
-  <!-- ================= INICIO ================= -->
-  <section id="view-inicio" class="view">
-    <div class="panel">
-      <div class="nav-mes">
-        <button class="btn secondary small" data-mes="-1" aria-label="Mes anterior">◀</button>
-        <input type="month" id="inicio-mes">
-        <button class="btn secondary small" data-mes="1" aria-label="Mes siguiente">▶</button>
-      </div>
-      <div class="kpis" id="inicio-kpis"></div>
-      <div class="actions" style="margin-top:14px;">
-        <button class="btn" data-goto="ingresos">+ Venta</button>
-        <button class="btn secondary" data-goto="egresos">+ Egreso</button>
-        <button class="btn secondary" data-goto="produccion">+ Producción</button>
-        <button class="btn mostaza" data-goto="panel">Ver panel</button>
-      </div>
-    </div>
-    <div class="panel">
-      <h2 class="section">Para mirar</h2>
-      <div id="inicio-alertas"></div>
-    </div>
-    <div class="panel">
-      <h2 class="section">Lo más vendido del mes</h2>
-      <div class="table-wrap"><table id="inicio-top"></table></div>
-      <div class="empty" id="inicio-top-empty">No hay ventas con detalle de productos en este mes.</div>
-    </div>
-  </section>
 
   <!-- ================= INGRESOS ================= -->
   <section id="view-ingresos" class="view">
@@ -326,6 +297,13 @@
         <div class="field"><label for="g-prov">Proveedor</label><input id="g-prov" list="dl-proveedores" placeholder="Opcional"></div>
         <div class="field wide"><label for="g-nota">Detalle</label><input id="g-nota" placeholder="Ej: cebolla y tomate"></div>
       </div>
+      <details id="g-compra-det" style="margin:4px 0 12px;">
+        <summary><b>Detalle de compra</b> <span class="hint">(opcional: qué insumos compraste; suma al stock de insumos)</span></summary>
+        <div class="items" id="g-items" style="margin-top:10px;"></div>
+        <button class="btn ghost" id="g-add">+ Agregar insumo</button>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:6px;"><input type="checkbox" id="g-act-precios" checked> Actualizar el precio de los insumos con esta compra (recalcula los costos)</label>
+        <p class="hint" id="g-items-total"></p>
+      </details>
       <div class="actions">
         <button class="btn" id="g-guardar">Guardar egreso</button>
         <button class="btn secondary" id="g-cancelar" style="display:none;">Cancelar edición</button>
@@ -379,6 +357,8 @@
 
   <!-- ================= STOCK ================= -->
   <section id="view-stock" class="view">
+    <div class="seg" id="st-seg"><button data-v="productos" class="on">Productos terminados</button><button data-v="insumos">Insumos</button></div>
+    <div id="st-productos">
     <div class="panel">
       <h2 class="section">Stock de productos terminados</h2>
       <p class="hint" style="margin-bottom:10px;">Se calcula solo: <b>producido − vendido ± ajustes</b>.</p>
@@ -415,6 +395,43 @@
       </table></div>
       <div class="empty" id="ajustes-empty">Sin ajustes.</div>
     </div>
+    </div>
+
+    <div id="st-insumos" style="display:none;">
+      <div class="panel">
+        <h2 class="section">Stock de insumos</h2>
+        <p class="hint" style="margin-bottom:10px;">Se calcula solo: <b>comprado − usado en producción ± ajustes</b>. Lo comprado sale del <b>detalle de compra</b> de los egresos; lo usado, de cada producción según su receta. Empieza en cero: hacé un conteo para arrancar con lo que hay. Mano de obra y servicios (horas, luz/gas) no llevan stock.</p>
+        <div class="actions" style="margin-bottom:10px;">
+          <button class="btn secondary small" id="si-conteo-btn">Contar insumos</button>
+          <label class="hint" style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="si-todos"> Mostrar insumos sin movimiento</label>
+        </div>
+        <div id="si-conteo-box" style="display:none;" class="alert">
+          Escribí cuánto hay <b>de verdad</b> de cada insumo (en su unidad). Al guardar se crea un ajuste por la diferencia.
+          <div class="row" style="margin-top:8px;"><div class="field narrow"><label for="si-conteo-fecha">Fecha del conteo</label><input type="date" id="si-conteo-fecha"></div></div>
+          <div class="actions"><button class="btn small" id="si-conteo-guardar">Guardar conteo</button><button class="btn secondary small" id="si-conteo-cancelar">Cancelar</button></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Insumo</th><th class="amt">Stock</th><th class="amt hide-sm">Comprado</th><th class="amt hide-sm">Usado</th><th class="amt hide-sm">Ajustes</th><th class="amt">Mínimo</th><th class="amt">Valor</th><th></th></tr></thead>
+          <tbody id="tbl-si"></tbody>
+        </table></div>
+      </div>
+      <div class="panel" id="ai-panel">
+        <h2 class="section">Ajuste de insumo</h2>
+        <p class="hint" style="margin-bottom:8px;">Para mermas o lo que se usó fuera de una receta. Negativo = sale del stock.</p>
+        <div class="row">
+          <div class="field narrow"><label for="ai-fecha">Fecha</label><input type="date" id="ai-fecha"></div>
+          <div class="field wide"><label for="ai-ins">Insumo</label><select id="ai-ins"></select></div>
+          <div class="field narrow"><label for="ai-cant">Cantidad (±)</label><input type="number" id="ai-cant" step="any" inputmode="decimal"></div>
+          <div class="field narrow"><label for="ai-motivo">Motivo</label><select id="ai-motivo"><option>Merma</option><option>Autoconsumo</option><option>Conteo</option><option>Otro</option></select></div>
+        </div>
+        <button class="btn" id="ai-guardar">Guardar ajuste</button>
+        <h3 class="sub">Últimos ajustes de insumos</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Insumo</th><th class="amt">Cantidad</th><th>Motivo</th><th></th></tr></thead>
+          <tbody id="tbl-ai"></tbody>
+        </table></div>
+      </div>
+    </div>
   </section>
 
   <!-- ================= PANEL DE CONTROL ================= -->
@@ -434,10 +451,25 @@
       </div>
       <p class="hint" id="pn-rango"></p>
     </div>
-    <div class="seg" id="pn-seg"><button data-v="ventas" class="on">Ventas</button><button data-v="costos">Costos</button><button data-v="resultados">Estado de resultados</button></div>
+    <div class="seg" id="pn-seg"><button data-v="resumen" class="on">Resumen</button><button data-v="ventas">Ventas</button><button data-v="costos">Costos</button><button data-v="resultados">Resultados</button></div>
+
+    <!-- Resumen -->
+    <div id="pn-resumen">
+      <div id="migracion-box"></div>
+      <div class="kpis" id="rs-kpis" style="margin-bottom:16px;"></div>
+      <div class="panel">
+        <h2 class="section">Para mirar</h2>
+        <div id="rs-alertas"></div>
+      </div>
+      <div class="panel">
+        <h2 class="section">Lo más vendido del período</h2>
+        <div class="table-wrap"><table id="rs-top"></table></div>
+        <div class="empty" id="rs-top-empty">No hay ventas con detalle de productos en el período.</div>
+      </div>
+    </div>
 
     <!-- Ventas agrupables -->
-    <div id="pn-ventas">
+    <div id="pn-ventas" style="display:none;">
       <div class="panel">
         <h2 class="section">Ventas del período</h2>
         <div class="kpis" id="pv-kpis" style="margin-bottom:14px;"></div>
@@ -481,7 +513,7 @@
       <div class="panel">
         <h2 class="section">Estado de resultados</h2>
         <div class="table-wrap"><table id="tbl-pr"></table></div>
-        <p class="hint" style="margin-top:8px;"><b>Resultado operativo</b> = ventas − egresos cargados. <b>Margen teórico</b> = lo que deja lo vendido según el costo de receta (solo ventas con productos; las recetas ya incluyen horas de trabajo y luz/gas, por eso no se resta de nuevo).</p>
+        <p class="hint" style="margin-top:8px;"><b>Resultado operativo</b> = ventas − egresos cargados. <b>Margen de lo vendido</b> = (precio − costo de receta) / precio, sobre lo que se vendió con productos cargados (solo ventas con productos; las recetas ya incluyen horas de trabajo y luz/gas, por eso no se resta de nuevo).</p>
       </div>
       <div class="panel">
         <h2 class="section">Mes a mes</h2>
@@ -525,7 +557,7 @@
 
   <!-- ================= DATOS MAESTROS ================= -->
   <section id="view-maestros" class="view">
-    <div class="seg" id="dm-seg"><button data-v="productos" class="on">Productos</button><button data-v="insumos">Insumos</button><button data-v="clientes">Clientes</button><button data-v="familias">Familias</button></div>
+    <div class="seg" id="dm-seg"><button data-v="productos" class="on">Productos</button><button data-v="insumos">Insumos</button><button data-v="clientes">Clientes</button><button data-v="familias">Familias</button><button data-v="categorias">Categorías de egresos</button></div>
 
     <!-- Productos -->
     <div id="dm-productos">
@@ -645,34 +677,29 @@
         </table></div>
       </div>
     </div>
-  </section>
 
-  <!-- ================= CONFIGURACIÓN ================= -->
-  <section id="view-config" class="view">
-    <div class="panel">
-      <h2 class="section">Categorías de egresos</h2>
-      <p class="hint" style="margin-bottom:10px;">El grupo ordena el estado de resultados: <b>Mercadería</b> (lo que se compra para producir o revender), <b>Fijos</b> (sueldos, impuestos), <b>Otros</b>.</p>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Categoría</th><th>Grupo</th><th></th></tr></thead>
-        <tbody id="tbl-cats"></tbody>
-      </table></div>
-      <div class="row" style="margin-top:10px;">
-        <div class="field"><label for="cat-nombre">Nueva categoría</label><input id="cat-nombre"></div>
-        <div class="field narrow"><label for="cat-grupo">Grupo</label><select id="cat-grupo"></select></div>
-        <div class="field auto"><label>&nbsp;</label><button class="btn" id="cat-guardar">Agregar</button></div>
+    <!-- Categorías de egresos -->
+    <div id="dm-categorias" style="display:none;">
+      <div class="panel">
+        <h2 class="section">Categorías de egresos</h2>
+        <p class="hint" style="margin-bottom:10px;">El grupo ordena el estado de resultados: <b>Mercadería</b> (lo que se compra para producir o revender), <b>Fijos</b> (sueldos, impuestos), <b>Otros</b>.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Categoría</th><th>Grupo</th><th></th></tr></thead>
+          <tbody id="tbl-cats"></tbody>
+        </table></div>
+        <div class="row" style="margin-top:10px;">
+          <div class="field"><label for="cat-nombre">Nueva categoría</label><input id="cat-nombre"></div>
+          <div class="field narrow"><label for="cat-grupo">Grupo</label><select id="cat-grupo"></select></div>
+          <div class="field auto"><label>&nbsp;</label><button class="btn" id="cat-guardar">Agregar</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 class="section">Datos</h2>
+        <p class="hint">Todo se guarda en la planilla de Google <b>KASA NORTE</b>, en las pestañas que empiezan con "App". Se pueden abrir y leer, pero conviene no editarlas a mano.</p>
       </div>
     </div>
-    <div class="panel">
-      <h2 class="section">Importar la planilla vieja</h2>
-      <p class="hint" style="margin-bottom:10px;">Lee las pestañas COSTOS, PRODUCCION, INGRESOS Y EGRESOS, CLIENTES y Base de datos de la planilla, y las pasa a la app. No las modifica. Solo se puede hacer una vez, con la app vacía.</p>
-      <div class="actions"><button class="btn secondary" id="imp-preview">Ver qué se importaría</button><button class="btn" id="imp-run" disabled>Importar</button></div>
-      <div id="imp-result" style="margin-top:12px;"></div>
-    </div>
-    <div class="panel">
-      <h2 class="section">Datos</h2>
-      <p class="hint">Todo se guarda en la planilla de Google <b>KASA NORTE</b>, en las pestañas que empiezan con "App". Se pueden abrir y leer, pero conviene no editarlas a mano.</p>
-    </div>
   </section>
+
 </main>
 
 <datalist id="dl-clientes"></datalist>

@@ -16,9 +16,9 @@ const ROUTES = [
   ['PATCH', '/api/ventas/:id/cobro', ['ventas'], c => routes.setCobro(c.state, c.params.id, c.body)],
   ['DELETE', '/api/ventas/:id', ['ventas', 'ventaItems'], c => routes.deleteVenta(c.state, c.params.id)],
 
-  ['POST', '/api/gastos', ['gastos'], c => routes.createGasto(c.state, c.body), 201],
-  ['PUT', '/api/gastos/:id', ['gastos'], c => routes.updateGasto(c.state, c.params.id, c.body)],
-  ['DELETE', '/api/gastos/:id', ['gastos'], c => routes.deleteGasto(c.state, c.params.id)],
+  ['POST', '/api/gastos', ['gastos', 'compraItems', 'insumos'], c => routes.createGasto(c.state, c.body), 201],
+  ['PUT', '/api/gastos/:id', ['gastos', 'compraItems', 'insumos'], c => routes.updateGasto(c.state, c.params.id, c.body)],
+  ['DELETE', '/api/gastos/:id', ['gastos', 'compraItems'], c => routes.deleteGasto(c.state, c.params.id)],
 
   ['POST', '/api/producciones', ['producciones'], c => routes.createProduccion(c.state, c.body), 201],
   ['DELETE', '/api/producciones/:id', ['producciones'], c => routes.deleteProduccion(c.state, c.params.id)],
@@ -26,6 +26,9 @@ const ROUTES = [
   ['POST', '/api/ajustes', ['ajustes'], c => routes.createAjuste(c.state, c.body), 201],
   ['POST', '/api/stock/conteo', ['ajustes'], c => routes.conteoStock(c.state, c.body), 201],
   ['DELETE', '/api/ajustes/:id', ['ajustes'], c => routes.deleteAjuste(c.state, c.params.id)],
+  ['POST', '/api/ajustes-insumo', ['ajustesInsumo'], c => routes.createAjusteInsumo(c.state, c.body), 201],
+  ['POST', '/api/stock-insumos/conteo', ['ajustesInsumo'], c => routes.conteoInsumos(c.state, c.body), 201],
+  ['DELETE', '/api/ajustes-insumo/:id', ['ajustesInsumo'], c => routes.deleteAjusteInsumo(c.state, c.params.id)],
 
   ['POST', '/api/insumos/familias', ['insumos'], c => routes.asignarFamiliasInsumos(c.state, c.body)],
   ['POST', '/api/insumos', ['insumos'], c => routes.createInsumo(c.state, c.body), 201],
@@ -54,9 +57,6 @@ const ROUTES = [
   ['PUT', '/api/categorias-gasto/:nombre', ['categoriasGasto', 'gastos'], c => routes.updateCategoriaGasto(c.state, c.params.nombre, c.body)],
   ['DELETE', '/api/categorias-gasto/:nombre', ['categoriasGasto'], c => routes.deleteCategoriaGasto(c.state, c.params.nombre)],
 
-  // Importación única desde las pestañas viejas: primero vista previa, después importar.
-  ['GET', '/api/importar', null, c => previewImport(c.state)],
-  ['POST', '/api/importar', store.TABLES, c => runImport(c.state), 201],
 ];
 
 const DATOS_PROPIOS = ['insumos', 'productos', 'producciones', 'ventas', 'gastos', 'clientes', 'otrosIngresos'];
@@ -70,17 +70,15 @@ async function leerPlanillaVieja(state) {
   }
 }
 
-async function previewImport(state) {
-  const r = await leerPlanillaVieja(state);
-  return { resumen: r.resumen, avisos: r.avisos, baseVacia: DATOS_PROPIOS.every(t => !state[t].length) };
-}
-
-async function runImport(state) {
-  if (!DATOS_PROPIOS.every(t => !state[t].length)) {
-    throw new ApiError(400, 'La app ya tiene datos cargados: la importación solo se puede hacer con la base vacía.');
-  }
-  const r = await leerPlanillaVieja(state);
+// Migración automática: la primera vez que se abre la app con la base vacía se traen
+// los datos de las pestañas viejas de la misma planilla (sin modificarlas). Si la
+// planilla no tiene esas pestañas, no hace nada. Devuelve el resumen o null.
+async function migrarSiHaceFalta(state) {
+  if (!DATOS_PROPIOS.every(t => !state[t].length)) return null;
+  let r;
+  try { r = await leerPlanillaVieja(state); } catch (e) { console.warn('Migración salteada:', e.message); return null; }
   store.TABLES.forEach(t => { state[t] = r.data[t]; });
+  await store.save(state, store.TABLES);
   return { resumen: r.resumen, avisos: r.avisos };
 }
 
@@ -172,7 +170,9 @@ async function handleApi(req, res, pathname) {
   const body = ['POST', 'PUT', 'PATCH'].includes(method) ? await readJsonBody(req) : {};
   const state = await store.load();
 
+  const migracion = method === 'GET' && pathname === '/api/state' ? await migrarSiHaceFalta(state) : null;
   const out = await handler({ state, params, body, session });
+  if (migracion) out.migracion = migracion;
   if (!writes) return sendJson(res, status, out === undefined ? { ok: true } : out);
   await store.save(state, writes);
   // Después de escribir se devuelve el state completo: el frontend lo usa directo.

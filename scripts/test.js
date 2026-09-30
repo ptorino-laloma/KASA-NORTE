@@ -19,7 +19,7 @@ function test(nombre, fn) {
 const vacio = () => ({
   insumos: [], productos: [], recetas: [], producciones: [], ventas: [], ventaItems: [],
   gastos: [], ajustes: [], clientes: [], categoriasGasto: DEFAULT_CATEGORIAS_GASTO.map(c => ({ ...c })),
-  familias: [{ nombre: 'Empanadas', tipo: 'producto' }, { nombre: 'Carnes', tipo: 'insumo' }], otrosIngresos: []
+  familias: [{ nombre: 'Empanadas', tipo: 'producto' }, { nombre: 'Carnes', tipo: 'insumo' }], otrosIngresos: [], compraItems: [], ajustesInsumo: []
 });
 
 // Escenario: empanada de carne, 10 docenas por tanda.
@@ -202,6 +202,43 @@ test('familia sugerida de insumos y asignación masiva', () => {
   routes.asignarFamiliasInsumos(s, { asignaciones: [{ insumoId: carne.id, familia: 'Carnes' }] });
   assert.equal(s.insumos[0].familia, 'Carnes');
   assert.throws(() => routes.asignarFamiliasInsumos(s, { asignaciones: [{ insumoId: carne.id, familia: 'Nada' }] }), /no existe/);
+});
+
+test('stock de insumos: compra suma (y actualiza precio), producción descuenta, conteo ajusta', () => {
+  const { s, pid, carne } = escenario();
+  const masas = s.insumos[1];
+  routes.createGasto(s, { fecha: '2026-09-01', categoria: 'Carniceria', items: [{ insumoId: carne.id, cantidad: 10, precioUnit: 16000 }] });
+  assert.equal(s.gastos[0].monto, 160000);                 // el monto sale del detalle
+  assert.equal(s.insumos[0].costo, 16000);                 // precio actualizado con la compra
+  assert.equal(s.insumos[0].actualizado, '2026-09-01');
+  routes.createGasto(s, { fecha: '2026-09-01', categoria: 'Masas', actualizarPrecios: false, items: [{ insumoId: masas.id, cantidad: 30, precioUnit: 1300 }] });
+  assert.equal(s.insumos[1].costo, 1100);                  // sin actualizar precio
+  routes.createProduccion(s, { fecha: '2026-09-02', productoId: pid, cantidad: 20 }); // 2 tandas: 6 kg carne, 20 doc masas
+  let st = Calc.stockInsumos(s);
+  assert.equal(st.get(carne.id).stock, 4);
+  assert.equal(st.get(masas.id).stock, 10);
+  routes.conteoInsumos(s, { fecha: '2026-09-03', conteos: [{ insumoId: carne.id, stockReal: 3.5 }] });
+  st = Calc.stockInsumos(s);
+  assert.equal(st.get(carne.id).stock, 3.5);
+  assert.throws(() => routes.deleteInsumo(s, masas.id), /lo usan|compras/);
+  // borrar el egreso borra su detalle
+  routes.deleteGasto(s, s.gastos[1].id);
+  assert.equal(Calc.stockInsumos(s).get(masas.id).stock, -20);
+});
+
+test('producciones importadas (sin consumo) no mueven el stock de insumos', () => {
+  const { s, pid, carne } = escenario();
+  s.producciones.push({ id: 'x', fecha: '2026-01-01', productoId: pid, cantidad: 50, costoUnit: 5600, consumo: null });
+  assert.equal(Calc.stockInsumos(s).get(carne.id).stock, 0);
+});
+
+test('valor del stock a costo y a precio de venta', () => {
+  const { s, pid } = escenario();
+  routes.createProduccion(s, { fecha: '2026-09-02', productoId: pid, cantidad: 10 });
+  const v = Calc.valorStock(s);
+  assert.equal(v.costo, 56000);
+  assert.equal(v.venta, 250000);
+  assert.equal(v.gananciaPotencial, 194000);
 });
 
 // Planilla de ejemplo con la misma forma que las pestañas reales (datos inventados).

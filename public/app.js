@@ -14,7 +14,8 @@ const MEDIOS = ['Transferencia', 'Efectivo', 'Otro'];
 
 let S = null;          // state del servidor
 let C = null;          // cálculos derivados (se rehacen con cada state)
-let tabActual = 'inicio';
+let tabActual = 'panel';
+let migracionInfo = null;   // resumen de la migración automática, si recién se hizo
 
 function esc(s) {
   return String(s === null || s === undefined ? '' : s)
@@ -126,7 +127,7 @@ async function guardando(btn, fn) {
 
 function setState(state) {
   S = state;
-  C = { idx: Calc.indices(S), costos: Calc.costosTodos(S), stock: Calc.stock(S) };
+  C = { idx: Calc.indices(S), costos: Calc.costosTodos(S), stock: Calc.stock(S), stockIns: Calc.stockInsumos(S) };
   $('hoy-label').textContent = fDate(hoy());
   refreshListas();
   render();
@@ -156,6 +157,7 @@ async function start() {
   const data = await res.json();
   document.body.classList.add('logged-in');
   if (!res.ok) { toast(data.error || 'Error cargando los datos.', true); return; }
+  if (data.migracion) migracionInfo = data.migracion;
   setState(data);
 }
 
@@ -187,6 +189,15 @@ function opcionesProductos(incluirInactivos) {
   });
   return [...grupos].map(([group, options]) => ({ group, options }));
 }
+function opcionesInsumos() {
+  const grupos = new Map();
+  [...S.insumos].sort((a, b) => (a.familia || 'zz').localeCompare(b.familia || 'zz') || a.nombre.localeCompare(b.nombre)).forEach(i => {
+    const g = i.familia || 'Sin familia';
+    if (!grupos.has(g)) grupos.set(g, []);
+    grupos.get(g).push({ value: i.id, label: i.nombre + (i.unidad ? ` (${i.unidad})` : '') });
+  });
+  return [...grupos].map(([group, options]) => ({ group, options }));
+}
 function refreshListas() {
   const opts = (arr) => arr.map(x => `<option value="${esc(x)}">`).join('');
   $('dl-clientes').innerHTML = opts([...S.clientes].map(c => c.nombre).sort());
@@ -195,6 +206,7 @@ function refreshListas() {
   fillSelect($('p-prod'), opcionesProductos(false), 'Elegí un producto');
   fillSelect($('a-prod'), opcionesProductos(true), 'Elegí un producto');
   fillSelect($('rc-prod'), opcionesProductos(true), 'Elegí un producto');
+  fillSelect($('ai-ins'), opcionesInsumos(), 'Elegí un insumo');
   fillSelect($('g-cat'), S.categoriasGasto.map(c => c.nombre), 'Elegí la categoría');
   fillSelect($('mp-familia'), familias('producto'), 'Sin familia');
   fillSelect($('mp-filtro-fam'), familias('producto'), 'Todas');
@@ -212,52 +224,6 @@ function problemasTxt(c) {
   if (c.avisos.length) return `<span class="chip warn" title="${esc(c.avisos.join(', '))}">incompleto</span>`;
   return '';
 }
-
-/* ================= INICIO ================= */
-
-let inicioMes = null;
-RENDER.inicio = function () {
-  inicioMes = inicioMes || mesActual();
-  $('inicio-mes').value = inicioMes;
-  const r = Calc.resumen(S, Calc.rangoMes(inicioMes));
-  const pendTotal = Calc.sum(S.ventas.filter(v => v.estadoPago === 'pendiente'), v => v.total);
-  const kpi = (label, value, foot, cls) => `<div class="kpi"><div class="label">${label}</div><div class="value num ${cls || ''}">${value}</div>${foot ? `<div class="foot">${foot}</div>` : ''}</div>`;
-  $('inicio-kpis').innerHTML =
-    kpi('Ventas', fmt(r.ventasTotal), `${r.cantVentas} venta${r.cantVentas === 1 ? '' : 's'}`) +
-    kpi('Egresos', fmt(r.gastosTotal), `Mercadería ${fmt(r.porGrupo['Mercadería'])}`) +
-    kpi('Resultado', fmt(r.resultadoFinal), r.otrosIngresos ? `incluye otros ingresos ${fmt(r.otrosIngresos)}` : 'ventas − egresos', r.resultadoFinal < 0 ? 'bad' : 'good') +
-    kpi('Margen teórico', pct(r.margenTeorico), r.ingresoConCosto ? `${fmt(r.gananciaTeorica)} sobre ${fmt(r.ingresoConCosto)}` : 'sin ventas con productos') +
-    kpi('Por cobrar', fmt(pendTotal), 'todas las fechas', pendTotal > 0 ? 'warn' : '');
-
-  const alertas = [];
-  const st = id => (C.stock.get(id) || { stock: 0 }).stock;
-  const negativos = S.productos.filter(p => st(p.id) < 0);
-  if (negativos.length) alertas.push(['bad', `${negativos.length} producto${negativos.length === 1 ? '' : 's'} con stock negativo (se vendió más de lo que figura producido). <button class="link" data-goto="stock">Ver stock</button>`]);
-  const bajos = S.productos.filter(p => p.activo && p.stockMinimo !== null && st(p.id) >= 0 && st(p.id) < p.stockMinimo);
-  if (bajos.length) alertas.push(['', `Stock bajo el mínimo: ${bajos.map(p => esc(p.nombre)).join(', ')}.`]);
-  const lista = (arr) => arr.slice(0, 6).map(p => esc(p.nombre)).join(', ') + (arr.length > 6 ? '…' : '');
-  const sinCosto = S.productos.filter(p => p.activo && costoU(p.id) === null);
-  if (sinCosto.length) alertas.push(['', `${sinCosto.length} producto${sinCosto.length === 1 ? '' : 's'} sin costo (falta receta o rinde): ${lista(sinCosto)}. <button class="link" data-goto="recetario">Ir al recetario</button>`]);
-  const sinPrecio = S.productos.filter(p => p.activo && !(p.precio > 0));
-  if (sinPrecio.length) alertas.push(['', `Sin precio de venta: ${lista(sinPrecio)}. <button class="link" data-goto="maestros">Datos maestros</button>`]);
-  const perdida = S.productos.filter(p => p.activo && p.precio > 0 && costoU(p.id) !== null && costoU(p.id) >= p.precio);
-  if (perdida.length) alertas.push(['bad', `Precio por debajo del costo: ${perdida.map(p => esc(p.nombre)).join(', ')}.`]);
-  const sinFamIns = S.insumos.filter(i => !i.familia).length;
-  if (sinFamIns) alertas.push(['', `${sinFamIns} insumos sin familia. <button class="link" data-goto="maestros" data-dm="insumos">Asignar</button>`]);
-  if (r.ventasSinDetalle > 0) alertas.push(['', `${fmt(r.ventasSinDetalle)} de ventas del mes no tienen productos cargados: no descuentan stock ni entran en el margen.`]);
-  const gPend = Calc.sum(S.gastos.filter(g => g.estadoPago === 'pendiente'), g => g.monto);
-  if (gPend > 0) alertas.push(['', `Egresos a pagar: ${fmt(gPend)}.`]);
-  $('inicio-alertas').innerHTML = alertas.length
-    ? alertas.map(([cls, t]) => `<div class="alert ${cls}">${t}</div>`).join('')
-    : '<div class="empty">Todo en orden.</div>';
-
-  const top = Calc.porProducto(S, Calc.rangoMes(inicioMes)).slice(0, 8);
-  const max = Math.max(1, ...top.map(t => t.ingresos));
-  $('inicio-top').innerHTML = top.length ? `<thead><tr><th>Producto</th><th class="amt">Cant.</th><th class="amt">Ingresos</th><th class="hide-sm"></th><th class="amt">Margen</th></tr></thead><tbody>` +
-    top.map(t => `<tr><td>${esc(prodNombre(t.productoId))}</td><td class="amt num">${fmtQ(t.cantidad)}</td><td class="amt num">${fmt(t.ingresos)}</td>
-      <td class="hide-sm" style="width:30%"><span class="bar" style="width:${Math.round(t.ingresos / max * 100)}%"></span></td><td class="amt num">${pct(t.margen)}</td></tr>`).join('') + '</tbody>' : '';
-  $('inicio-top-empty').style.display = top.length ? 'none' : '';
-};
 
 /* ================= INGRESOS: ventas ================= */
 
@@ -280,6 +246,15 @@ function precioPara(p) {
   if (esMayorista() && p.precioMayorista > 0) return p.precioMayorista;
   return p.precio;
 }
+function subVenta(it) {
+  const p = C.idx.productos.get(it.productoId);
+  if (!p) return '';
+  const st = (C.stock.get(p.id) || {}).stock;
+  const partes = [];
+  if (st !== null && st !== undefined) partes.push(`Stock: ${fmtQ(st)}${p.unidad ? ' ' + esc(p.unidad) : ''}${st - (it.cantidad || 0) < 0 ? ' <span class="warn">(no alcanza)</span>' : ''}`);
+  partes.push(`Subtotal ${fmt((it.cantidad || 0) * (it.precioUnit || 0))}`);
+  return partes.join(' · ');
+}
 function nuevoRenglon() { return { productoId: '', cantidad: 1, precioUnit: null, precioTocado: false }; }
 
 function renderVentaForm() {
@@ -287,13 +262,7 @@ function renderVentaForm() {
   $('v-items').innerHTML = ventaItems.map((it, i) => {
     const p = C.idx.productos.get(it.productoId);
     const st = p ? (C.stock.get(p.id) || {}).stock : null;
-    let sub = '';
-    if (p) {
-      const partes = [];
-      if (st !== null && st !== undefined) partes.push(`Stock: ${fmtQ(st)}${p.unidad ? ' ' + esc(p.unidad) : ''}${st - it.cantidad < 0 ? ' <span class="warn">(no alcanza)</span>' : ''}`);
-      partes.push(`Subtotal ${fmt((it.cantidad || 0) * (it.precioUnit || 0))}`);
-      sub = `<div class="sub">${partes.join(' · ')}</div>`;
-    }
+    const sub = p ? `<div class="sub">${subVenta(it)}</div>` : '';
     const optsHtml = opts.map(g => `<optgroup label="${esc(g.group)}">${g.options.map(o => `<option value="${esc(o.value)}"${o.value === it.productoId ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</optgroup>`).join('');
     const extra = p && !p.activo ? `<option value="${esc(p.id)}" selected>${esc(p.nombre)} (inactivo)</option>` : '';
     return `<div class="item" data-i="${i}">
@@ -442,6 +411,7 @@ RENDER.ingresos = function () {
 /* ================= EGRESOS ================= */
 
 let gastoEditId = null, gastosMes = null;
+let gastoItems = [];   // detalle de compra: {insumoId, cantidad, precioUnit}
 function resetGastoForm() {
   gastoEditId = null;
   $('g-fecha').value = hoy();
@@ -451,6 +421,34 @@ function resetGastoForm() {
   $('gasto-titulo').textContent = 'Nuevo egreso';
   $('g-cancelar').style.display = 'none';
   $('gasto-panel').classList.remove('editing');
+  gastoItems = [];
+  $('g-act-precios').checked = true;
+  $('g-compra-det').open = false;
+  renderGastoItems();
+}
+function subCompra(it) {
+  const ins = C.idx.insumos.get(it.insumoId);
+  if (!ins) return '';
+  const antes = ins.costo !== null && it.precioUnit !== null && ins.costo !== it.precioUnit ? ` · precio anterior ${fmt(ins.costo)}` : '';
+  return `${esc(ins.unidad || 'unidad')} · subtotal ${fmt((it.cantidad || 0) * (it.precioUnit || 0))}${antes}`;
+}
+function renderGastoItems() {
+  const opts = opcionesInsumos();
+  $('g-items').innerHTML = gastoItems.map((it, i) => {
+    const ins = C.idx.insumos.get(it.insumoId);
+    const optsHtml = opts.map(g => `<optgroup label="${esc(g.group)}">${g.options.map(o => `<option value="${esc(o.value)}"${o.value === it.insumoId ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</optgroup>`).join('');
+    return `<div class="item" data-i="${i}">
+      <select data-f="insumoId" aria-label="Insumo"><option value="">Insumo…</option>${optsHtml}</select>
+      <input type="number" data-f="cantidad" value="${it.cantidad ?? ''}" min="0" step="any" inputmode="decimal" aria-label="Cantidad" placeholder="${ins && ins.unidad ? esc(ins.unidad) : 'cant.'}">
+      <input type="number" data-f="precioUnit" value="${it.precioUnit ?? ''}" min="0" step="any" inputmode="decimal" aria-label="Precio por unidad" placeholder="$/unidad">
+      <button class="x" data-quitarg="${i}" aria-label="Quitar">×</button>
+      ${ins ? `<div class="sub">${subCompra(it)}</div>` : ''}</div>`;
+  }).join('');
+  const conItems = gastoItems.filter(x => x.insumoId);
+  const total = Calc.sum(conItems, x => (x.cantidad || 0) * (x.precioUnit || 0));
+  $('g-monto').readOnly = conItems.length > 0;
+  if (conItems.length) $('g-monto').value = Calc.round2(total);
+  $('g-items-total').textContent = conItems.length ? `Total de la compra: ${fmt(total)} (es el monto del egreso).` : '';
 }
 function editarGasto(id) {
   const g = S.gastos.find(x => x.id === id);
@@ -463,6 +461,10 @@ function editarGasto(id) {
   $('g-estado').value = g.estadoPago;
   $('g-prov').value = g.proveedor || '';
   $('g-nota').value = g.nota || '';
+  gastoItems = S.compraItems.filter(i => i.gastoId === id).map(i => ({ insumoId: i.insumoId, cantidad: i.cantidad, precioUnit: i.precioUnit }));
+  $('g-act-precios').checked = false;
+  $('g-compra-det').open = gastoItems.length > 0;
+  renderGastoItems();
   $('gasto-titulo').textContent = 'Editando egreso del ' + fDate(g.fecha);
   $('g-cancelar').style.display = '';
   $('gasto-panel').classList.add('editing');
@@ -471,10 +473,13 @@ function editarGasto(id) {
 async function guardarGasto() {
   const body = {
     fecha: $('g-fecha').value, categoria: $('g-cat').value, monto: numVal('g-monto'),
-    medioPago: $('g-medio').value || null, estadoPago: $('g-estado').value, proveedor: $('g-prov').value, nota: $('g-nota').value
+    medioPago: $('g-medio').value || null, estadoPago: $('g-estado').value, proveedor: $('g-prov').value, nota: $('g-nota').value,
+    items: gastoItems.filter(x => x.insumoId).map(x => ({ insumoId: x.insumoId, cantidad: x.cantidad, precioUnit: x.precioUnit })),
+    actualizarPrecios: $('g-act-precios').checked
   };
   if (!body.categoria) return toast('Elegí la categoría.', true);
-  if (!(body.monto > 0)) return toast('Poné el monto.', true);
+  if (body.items.some(x => !(x.cantidad > 0) || x.precioUnit === null || isNaN(x.precioUnit))) return toast('Revisá cantidades y precios del detalle.', true);
+  if (!body.items.length && !(body.monto > 0)) return toast('Poné el monto.', true);
   if (gastoEditId) await api('PUT', '/api/gastos/' + gastoEditId, body);
   else await api('POST', '/api/gastos', body);
   toast(gastoEditId ? 'Egreso actualizado.' : 'Egreso guardado.');
@@ -484,6 +489,11 @@ async function guardarGasto() {
   $('g-cat').value = categoria;
   gastosMes = fecha.slice(0, 7);
   render();
+}
+function compraTxt(gastoId) {
+  const it = S.compraItems.filter(i => i.gastoId === gastoId);
+  if (!it.length) return '';
+  return `<div class="hint">${it.map(i => { const x = C.idx.insumos.get(i.insumoId); return `${fmtQ(i.cantidad)} ${esc(x ? x.unidad || '' : '')} ${esc(x ? x.nombre : '(borrado)')}`; }).join(', ')}</div>`;
 }
 RENDER.egresos = function () {
   gastosMes = gastosMes || mesActual();
@@ -498,7 +508,7 @@ RENDER.egresos = function () {
   $('tbl-gastos').innerHTML = list.map(g => `<tr>
       <td class="num">${fDate(g.fecha)}</td>
       <td>${esc(g.categoria)}${g.estadoPago === 'pendiente' ? ' <span class="chip pend">a pagar</span>' : ''}</td>
-      <td>${esc([g.proveedor, g.nota].filter(Boolean).join(' · ')) || '<span class="muted">—</span>'}</td>
+      <td>${esc([g.proveedor, g.nota].filter(Boolean).join(' · ')) || (compraTxt(g.id) ? '' : '<span class="muted">—</span>')}${compraTxt(g.id)}</td>
       <td class="amt num">${fmt(g.monto)}</td>
       <td class="amt"><button class="btn ghost small" data-editg="${g.id}">Editar</button><button class="btn ghost small" data-borrarg="${g.id}">Borrar</button></td>
     </tr>`).join('');
@@ -557,8 +567,13 @@ RENDER.produccion = function () {
 
 /* ================= STOCK ================= */
 
-let modoConteo = false;
+let modoConteo = false, stVista = 'productos', modoConteoIns = false;
+const FAMILIA_SIN_STOCK = 'Mano de obra y servicios';
 RENDER.stock = function () {
+  setSeg('st-seg', stVista);
+  $('st-productos').style.display = stVista === 'productos' ? '' : 'none';
+  $('st-insumos').style.display = stVista === 'insumos' ? '' : 'none';
+  if (stVista === 'insumos') return renderStockInsumos();
   if (!$('a-fecha').value) $('a-fecha').value = hoy();
   if (!$('s-conteo-fecha').value) $('s-conteo-fecha').value = hoy();
   const todos = $('s-todos').checked || modoConteo;
@@ -594,6 +609,46 @@ RENDER.stock = function () {
     <td class="amt"><button class="btn ghost small" data-borrara="${a.id}">Borrar</button></td></tr>`).join('');
   $('ajustes-empty').style.display = aj.length ? 'none' : '';
 };
+function renderStockInsumos() {
+  if (!$('ai-fecha').value) $('ai-fecha').value = hoy();
+  if (!$('si-conteo-fecha').value) $('si-conteo-fecha').value = hoy();
+  const todos = $('si-todos').checked || modoConteoIns;
+  $('si-conteo-box').style.display = modoConteoIns ? '' : 'none';
+  $('si-conteo-btn').style.display = modoConteoIns ? 'none' : '';
+  // Mano de obra y servicios (horas de trabajo, luz/gas) se costean pero no son stock físico.
+  const list = S.insumos.filter(i => i.familia !== FAMILIA_SIN_STOCK).filter(i => { const s = C.stockIns.get(i.id); return todos || s.comprado || s.consumido || s.ajustado; })
+    .sort((a, b) => (a.familia || 'zz').localeCompare(b.familia || 'zz') || a.nombre.localeCompare(b.nombre));
+  let fam = null, html = '', valor = 0;
+  list.forEach(i => {
+    const s = C.stockIns.get(i.id);
+    if ((i.familia || 'Sin familia') !== fam) { fam = i.familia || 'Sin familia'; html += `<tr class="cat"><td colspan="8">${esc(fam)}</td></tr>`; }
+    const v = i.costo !== null && s.stock > 0 ? i.costo * s.stock : null;
+    if (v) valor += v;
+    const cls = s.stock < 0 ? 'bad' : (i.stockMinimo !== null && i.stockMinimo !== undefined && s.stock < i.stockMinimo ? 'warn' : '');
+    html += `<tr><td>${esc(i.nombre)}${i.unidad ? ` <span class="hint">${esc(i.unidad)}</span>` : ''}</td>
+      <td class="amt num ${cls}">${modoConteoIns ? `<input type="number" class="inline" data-conteoins="${i.id}" value="${s.stock}" step="any" inputmode="decimal">` : fmtQ(s.stock)}</td>
+      <td class="amt num hide-sm">${fmtQ(s.comprado)}</td><td class="amt num hide-sm">${fmtQ(s.consumido)}</td><td class="amt num hide-sm">${fmtQ(s.ajustado)}</td>
+      <td class="amt"><input type="number" class="inline" style="width:64px" data-minins="${i.id}" value="${i.stockMinimo ?? ''}" min="0" step="any" inputmode="decimal" aria-label="Stock mínimo de ${esc(i.nombre)}"></td>
+      <td class="amt num">${v === null ? '—' : fmt(v)}</td>
+      <td class="amt">${modoConteoIns ? '' : `<button class="btn ghost small" data-ajustarins="${i.id}">Ajustar</button>`}</td></tr>`;
+  });
+  html += `<tr class="total"><td colspan="6">Valor de los insumos en stock</td><td class="amt num">${fmt(valor)}</td><td></td></tr>`;
+  $('tbl-si').innerHTML = list.length ? html : '<tr><td colspan="8" class="empty">Todavía no hay movimientos de insumos. Cargá compras con detalle en Egresos o hacé un conteo.</td></tr>';
+  const aj = [...S.ajustesInsumo].sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.creado || '').localeCompare(a.creado || '')).slice(0, 30);
+  $('tbl-ai').innerHTML = aj.map(a => { const x = C.idx.insumos.get(a.insumoId); return `<tr><td class="num">${fDate(a.fecha)}</td><td>${esc(x ? x.nombre : '(borrado)')}</td>
+    <td class="amt num ${a.cantidad < 0 ? 'bad' : 'good'}">${a.cantidad > 0 ? '+' : ''}${fmtQ(a.cantidad)} ${esc(x ? x.unidad || '' : '')}</td><td>${esc(a.motivo)}</td>
+    <td class="amt"><button class="btn ghost small" data-borrarai="${a.id}">Borrar</button></td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">Sin ajustes.</td></tr>';
+}
+async function guardarConteoIns() {
+  const conteos = [...document.querySelectorAll('[data-conteoins]')].map(inp => ({
+    insumoId: inp.dataset.conteoins, stockReal: inp.value.trim() === '' ? null : Number(inp.value.replace(',', '.'))
+  })).filter(c => c.stockReal !== null && c.stockReal !== C.stockIns.get(c.insumoId).stock);
+  if (!conteos.length) { modoConteoIns = false; render(); return toast('No cambiaste ningún número.'); }
+  const r = await api('POST', '/api/stock-insumos/conteo', { fecha: $('si-conteo-fecha').value, conteos, nota: 'Conteo físico' });
+  modoConteoIns = false;
+  toast(`Conteo guardado: ${r.ajustes} ajuste${r.ajustes === 1 ? '' : 's'}.`);
+  render();
+}
 async function guardarConteo() {
   const conteos = [...document.querySelectorAll('[data-conteo]')].map(inp => ({
     productoId: inp.dataset.conteo, stockReal: inp.value.trim() === '' ? null : Number(inp.value.replace(',', '.'))
@@ -618,7 +673,7 @@ async function guardarAjuste() {
 
 /* ================= PANEL DE CONTROL ================= */
 
-let pnVista = 'ventas', pcVista = 'insumo';
+let pnVista = 'resumen', pcVista = 'insumo';
 let pvLimite = 40;   // grupos visibles en la tabla de ventas ("ver más" suma de a 40)
 const pvAbiertos = new Set();
 
@@ -639,13 +694,69 @@ function rangoTxt(r) { return `${fDate(r.desde)} al ${fDate(r.hasta)}`; }
 
 RENDER.panel = function () {
   setSeg('pn-seg', pnVista);
-  ['ventas', 'costos', 'resultados'].forEach(v => { $('pn-' + v).style.display = pnVista === v ? '' : 'none'; });
+  ['resumen', 'ventas', 'costos', 'resultados'].forEach(v => { $('pn-' + v).style.display = pnVista === v ? '' : 'none'; });
   const r = rangoPanel(), rc = rangoComp(r);
-  $('pn-rango').textContent = `Del ${rangoTxt(r)}` + (pnVista === 'resultados' ? ` · comparado con ${rangoTxt(rc)}` : '');
-  if (pnVista === 'ventas') renderPanelVentas(r);
+  $('pn-rango').textContent = `Del ${rangoTxt(r)}` + (['resultados', 'resumen'].includes(pnVista) ? ` · comparado con ${rangoTxt(rc)}` : '');
+  if (pnVista === 'resumen') renderPanelResumen(r, rc);
+  else if (pnVista === 'ventas') renderPanelVentas(r);
   else if (pnVista === 'costos') renderPanelCostos(r);
   else renderPanelResultados(r, rc);
 };
+
+function renderPanelResumen(r, rc) {
+  const a = Calc.resumen(S, r), b = Calc.resumen(S, rc);
+  const pendTotal = Calc.sum(S.ventas.filter(v => v.estadoPago === 'pendiente'), v => v.total);
+  const vs = Calc.valorStock(S);
+  const kpi = (label, value, foot, cls) => `<div class="kpi"><div class="label">${label}</div><div class="value num ${cls || ''}">${value}</div><div class="foot">${foot}</div></div>`;
+  $('rs-kpis').innerHTML =
+    kpi('Ventas', fmt(a.ventasTotal), `${a.cantVentas} ventas · ${delta(a.ventasTotal, b.ventasTotal, true)}`) +
+    kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
+    kpi('Resultado', fmt(a.resultadoFinal), delta(a.resultadoFinal, b.resultadoFinal, true), a.resultadoFinal < 0 ? 'bad' : 'good') +
+    kpi('Margen de lo vendido', pct(a.margenTeorico), a.ingresoConCosto ? `según receta, sobre ${fmt(a.ingresoConCosto)} · ${delta(a.margenTeorico, b.margenTeorico, true, true)}` : 'sin ventas con productos') +
+    kpi('Venta promedio', fmt(a.ticketPromedio), `por venta · ${delta(a.ticketPromedio, b.ticketPromedio, true)}`) +
+    kpi('Por cobrar', fmt(pendTotal), 'todas las fechas', pendTotal > 0 ? 'warn' : '') +
+    kpi('Stock a precio de venta', fmt(vs.venta), `cuesta ${fmt(vs.costo)} · dejaría ${fmt(vs.gananciaPotencial)}`);
+
+  // migración automática recién hecha
+  $('migracion-box').innerHTML = migracionInfo ? (() => {
+    const x = migracionInfo.resumen, grupos = new Map();
+    migracionInfo.avisos.forEach(av => { if (!grupos.has(av.seccion)) grupos.set(av.seccion, []); grupos.get(av.seccion).push(av.texto); });
+    return `<div class="panel"><h2 class="section">Datos de la planilla vieja importados</h2>
+      <div class="alert">Se trajeron ${x.productos} productos, ${x.insumos} insumos, ${x.recetas} renglones de receta, ${x.producciones} producciones, ${x.ventas} ventas (${fmt(x.totalVentas)}), ${x.gastos} egresos (${fmt(x.totalGastos)}) y ${x.clientes} clientes. Las pestañas viejas no se tocaron.</div>
+      ${[...grupos].map(([sec, ts]) => `<details><summary><b>${esc(sec)}</b> (${ts.length})</summary><ul>${ts.map(t => `<li class="hint">${esc(t)}</li>`).join('')}</ul></details>`).join('')}
+      <button class="btn secondary small" id="migracion-ok" style="margin-top:10px;">Entendido</button></div>`;
+  })() : '';
+
+  const alertas = [];
+  const st = id => (C.stock.get(id) || { stock: 0 }).stock;
+  const lista = arr => arr.slice(0, 6).map(p => esc(p.nombre)).join(', ') + (arr.length > 6 ? '…' : '');
+  const negativos = S.productos.filter(p => st(p.id) < 0);
+  if (negativos.length) alertas.push(['bad', `${negativos.length} producto${negativos.length === 1 ? '' : 's'} con stock negativo (se vendió más de lo que figura producido). <button class="link" data-goto="stock">Ver stock</button>`]);
+  const bajos = S.productos.filter(p => p.activo && p.stockMinimo !== null && st(p.id) >= 0 && st(p.id) < p.stockMinimo);
+  if (bajos.length) alertas.push(['', `Productos bajo el mínimo: ${lista(bajos)}.`]);
+  const insBajos = S.insumos.filter(i => i.familia !== FAMILIA_SIN_STOCK && i.stockMinimo !== null && i.stockMinimo !== undefined && C.stockIns.get(i.id).stock < i.stockMinimo);
+  if (insBajos.length) alertas.push(['', `Insumos para reponer (bajo el mínimo): ${lista(insBajos)}. <button class="link" data-goto="stock" data-st="insumos">Ver</button>`]);
+  const sinCosto = S.productos.filter(p => p.activo && costoU(p.id) === null);
+  if (sinCosto.length) alertas.push(['', `${sinCosto.length} producto${sinCosto.length === 1 ? '' : 's'} sin costo (falta receta o rinde): ${lista(sinCosto)}. <button class="link" data-goto="recetario">Ir al recetario</button>`]);
+  const sinPrecio = S.productos.filter(p => p.activo && !(p.precio > 0));
+  if (sinPrecio.length) alertas.push(['', `Sin precio de venta: ${lista(sinPrecio)}. <button class="link" data-goto="maestros">Datos maestros</button>`]);
+  const perdida = S.productos.filter(p => p.activo && p.precio > 0 && costoU(p.id) !== null && costoU(p.id) >= p.precio);
+  if (perdida.length) alertas.push(['bad', `Precio por debajo del costo: ${perdida.map(p => esc(p.nombre)).join(', ')}.`]);
+  const sinFamIns = S.insumos.filter(i => !i.familia).length;
+  if (sinFamIns) alertas.push(['', `${sinFamIns} insumos sin familia. <button class="link" data-goto="maestros" data-dm="insumos">Asignar</button>`]);
+  if (a.ventasSinDetalle > 0) alertas.push(['', `${fmt(a.ventasSinDetalle)} de ventas del período no tienen productos cargados: no descuentan stock ni entran en el margen.`]);
+  const gPend = Calc.sum(S.gastos.filter(g => g.estadoPago === 'pendiente'), g => g.monto);
+  if (gPend > 0) alertas.push(['', `Egresos a pagar: ${fmt(gPend)}.`]);
+  if (!S.compraItems.length) alertas.push(['', 'Para tener stock de insumos, cargá las compras con <b>detalle de compra</b> en Egresos y hacé un conteo inicial. <button class="link" data-goto="stock" data-st="insumos">Stock de insumos</button>']);
+  $('rs-alertas').innerHTML = alertas.length ? alertas.map(([cls, t]) => `<div class="alert ${cls}">${t}</div>`).join('') : '<div class="empty">Todo en orden.</div>';
+
+  const top = Calc.porProducto(S, r).slice(0, 8);
+  const max = Math.max(1, ...top.map(t => t.ingresos));
+  $('rs-top').innerHTML = top.length ? `<thead><tr><th>Producto</th><th class="amt">Cant.</th><th class="amt">Ingresos</th><th class="hide-sm"></th><th class="amt">Margen</th></tr></thead><tbody>` +
+    top.map(t => `<tr><td>${esc(prodNombre(t.productoId))}</td><td class="amt num">${fmtQ(t.cantidad)}</td><td class="amt num">${fmt(t.ingresos)}</td>
+      <td class="hide-sm" style="width:30%"><span class="bar" style="width:${Math.round(t.ingresos / max * 100)}%"></span></td><td class="amt num">${pct(t.margen)}</td></tr>`).join('') + '</tbody>' : '';
+  $('rs-top-empty').style.display = top.length ? 'none' : '';
+}
 
 const CLAVES_VENTA = { producto: 'Producto', familia: 'Familia', cliente: 'Cliente', tipoCliente: 'Tipo de cliente', mes: 'Mes' };
 function clavesVenta() { return [...document.querySelectorAll('#pv-group input:checked')].map(i => i.value); }
@@ -664,8 +775,8 @@ function renderPanelVentas(r) {
   const kpi = (label, value, foot) => `<div class="kpi"><div class="label">${label}</div><div class="value num">${value}</div>${foot ? `<div class="foot">${foot}</div>` : ''}</div>`;
   $('pv-kpis').innerHTML = total
     ? kpi('Ventas', fmt(total.ingreso), `${total.cantVentas} ventas`) +
-      kpi('Ticket promedio', fmt(total.cantVentas ? total.ingreso / total.cantVentas : null)) +
-      kpi('Ganancia teórica', fmt(total.ganancia), total.margen !== null ? `margen ${pct(total.margen)}` : '') +
+      kpi('Venta promedio', fmt(total.cantVentas ? total.ingreso / total.cantVentas : null), 'por venta') +
+      kpi('Ganancia según receta', fmt(total.ganancia), total.margen !== null ? `margen de lo vendido ${pct(total.margen)}` : '') +
       kpi('Clientes', new Set(filas.map(f => f.clienteId).filter(Boolean)).size)
     : kpi('Ventas', fmt(0), 'sin ventas en el período');
   const heads = claves.length ? claves.map(k => `<th>${CLAVES_VENTA[k]}</th>`).join('') : '<th>Total</th>';
@@ -704,8 +815,7 @@ function renderPanelCostos(r) {
   const kpi = (label, value, foot) => `<div class="kpi"><div class="label">${label}</div><div class="value num">${value}</div>${foot ? `<div class="foot">${foot}</div>` : ''}</div>`;
   $('pc-kpis').innerHTML =
     kpi('Costo productivo total', fmt(c.total), `${c.porProducto.length} productos producidos`) +
-    kpi('Compras de mercadería', fmt(compras), 'egresos cargados, para comparar') +
-    kpi('Insumos usados', c.porInsumo.filter(x => x.insumoId !== '__sin__').length);
+    kpi('Compras de mercadería', fmt(compras), 'egresos cargados, para comparar');
   let html;
   if (pcVista === 'insumo') {
     const porFam = new Map();
@@ -754,8 +864,8 @@ function renderPanelResultados(r, rc) {
     kpi('Ventas', fmt(a.ventasTotal), delta(a.ventasTotal, b.ventasTotal, true)) +
     kpi('Egresos', fmt(a.gastosTotal), delta(a.gastosTotal, b.gastosTotal, false)) +
     kpi('Resultado', fmt(a.resultadoFinal), delta(a.resultadoFinal, b.resultadoFinal, true), a.resultadoFinal < 0 ? 'bad' : 'good') +
-    kpi('Margen teórico', pct(a.margenTeorico), delta(a.margenTeorico, b.margenTeorico, true, true)) +
-    kpi('Ticket promedio', fmt(a.ticketPromedio), delta(a.ticketPromedio, b.ticketPromedio, true));
+    kpi('Margen de lo vendido', pct(a.margenTeorico), delta(a.margenTeorico, b.margenTeorico, true, true)) +
+    kpi('Venta promedio', fmt(a.ticketPromedio), delta(a.ticketPromedio, b.ticketPromedio, true));
 
   // Estado de resultados vertical, con el detalle por categoría dentro de cada grupo.
   const catsDe = (res, grupo) => Object.keys(res.porCategoria).filter(c => Calc.grupoDe(S, c) === grupo);
@@ -775,17 +885,17 @@ function renderPanelResultados(r, rc) {
     grupoLineas('Otros', 'Otros egresos') +
     linea('<b>= Resultado operativo</b>', a.resultado, b.resultado, 'total') +
     (a.otrosIngresos || b.otrosIngresos ? linea('+ Otros ingresos', a.otrosIngresos, b.otrosIngresos) + linea('<b>= Resultado final</b>', a.resultadoFinal, b.resultadoFinal, 'total') : '') +
-    `<tr><td colspan="5" style="padding-top:14px;" class="muted">Rentabilidad teórica (receta)</td></tr>` +
+    `<tr><td colspan="5" style="padding-top:14px;" class="muted">Según costo de receta (lo vendido con productos)</td></tr>` +
     linea('Ventas con productos', a.ingresoConCosto, b.ingresoConCosto) +
     linea('− Costo de lo vendido', a.costoVendido, b.costoVendido, '', false) +
-    linea('<b>= Ganancia teórica</b>', a.gananciaTeorica, b.gananciaTeorica, 'total') + '</tbody>';
+    linea('<b>= Ganancia de lo vendido</b>', a.gananciaTeorica, b.gananciaTeorica, 'total') + '</tbody>';
 
   // Tendencia: meses que terminan en el último mes del período (6 en el celular, 12 en pantalla ancha).
   const n = $('pr-chart').clientWidth < 560 ? 6 : 12;
   const data = Calc.tendencia(S, r.hasta.slice(0, 7), n);
   dibujarTendencia($('pr-chart'), data);
   $('pr-legend').innerHTML = `<span><i style="background:var(--c-ventas)"></i>Ventas</span><span><i style="background:var(--c-egresos)"></i>Egresos</span><span><i class="line" style="background:var(--c-resultado)"></i>Resultado</span>`;
-  $('tbl-pr-meses').innerHTML = `<thead><tr><th>Mes</th><th class="amt">Ventas</th><th class="amt hide-sm">Mercadería</th><th class="amt hide-sm">Fijos</th><th class="amt hide-sm">Otros</th><th class="amt">Egresos</th><th class="amt">Resultado</th><th class="amt">Margen teór.</th></tr></thead><tbody>` +
+  $('tbl-pr-meses').innerHTML = `<thead><tr><th>Mes</th><th class="amt">Ventas</th><th class="amt hide-sm">Mercadería</th><th class="amt hide-sm">Fijos</th><th class="amt hide-sm">Otros</th><th class="amt">Egresos</th><th class="amt">Resultado</th><th class="amt">Margen vendido</th></tr></thead><tbody>` +
     data.slice().reverse().map(m => `<tr><td>${mesLabel(m.mes)}</td><td class="amt num">${fmt(m.ventasTotal)}</td><td class="amt num hide-sm">${fmt(m.porGrupo['Mercadería'])}</td>
       <td class="amt num hide-sm">${fmt(m.porGrupo['Fijos'])}</td><td class="amt num hide-sm">${fmt(m.porGrupo['Otros'])}</td><td class="amt num">${fmt(m.gastosTotal)}</td>
       <td class="amt num ${m.resultadoFinal < 0 ? 'bad' : 'good'}">${fmt(m.resultadoFinal)}</td><td class="amt num">${pct(m.margenTeorico)}</td></tr>`).join('') + '</tbody>';
@@ -946,8 +1056,8 @@ let mpEditId = null;       // producto en edición (null = nuevo)
 
 RENDER.maestros = function () {
   setSeg('dm-seg', dmVista);
-  ['productos', 'insumos', 'clientes', 'familias'].forEach(v => { $('dm-' + v).style.display = dmVista === v ? '' : 'none'; });
-  ({ productos: renderMProductos, insumos: renderMInsumos, clientes: renderMClientes, familias: renderMFamilias })[dmVista]();
+  ['productos', 'insumos', 'clientes', 'familias', 'categorias'].forEach(v => { $('dm-' + v).style.display = dmVista === v ? '' : 'none'; });
+  ({ productos: renderMProductos, insumos: renderMInsumos, clientes: renderMClientes, familias: renderMFamilias, categorias: renderMCategorias })[dmVista]();
 };
 
 function renderMProductos() {
@@ -1141,36 +1251,12 @@ function renderMFamilias() {
   $('tbl-fa').innerHTML = html;
 }
 
-/* ================= CONFIGURACIÓN ================= */
-
-RENDER.config = function () {
+function renderMCategorias() {
   const usos = new Map();
   S.gastos.forEach(g => usos.set(g.categoria, (usos.get(g.categoria) || 0) + 1));
   $('tbl-cats').innerHTML = S.categoriasGasto.map(c => `<tr><td>${esc(c.nombre)} <span class="hint">${usos.get(c.nombre) || 0} egresos</span></td>
     <td><select data-grupo="${esc(c.nombre)}" style="width:auto;">${['Mercadería', 'Fijos', 'Otros'].map(g => `<option${g === c.grupo ? ' selected' : ''}>${g}</option>`).join('')}</select></td>
     <td class="amt"><button class="btn ghost small" data-renombrar="${esc(c.nombre)}">Renombrar</button>${usos.get(c.nombre) ? '' : `<button class="btn ghost small" data-borrarcat="${esc(c.nombre)}">Borrar</button>`}</td></tr>`).join('');
-};
-async function previewImport() {
-  const r = await api('GET', '/api/importar');
-  mostrarImport(r, false);
-  $('imp-run').disabled = !r.baseVacia;
-}
-function mostrarImport(r, hecho) {
-  const x = r.resumen;
-  const grupos = new Map();
-  r.avisos.forEach(a => { if (!grupos.has(a.seccion)) grupos.set(a.seccion, []); grupos.get(a.seccion).push(a.texto); });
-  $('imp-result').innerHTML = `<div class="alert"><b>${hecho ? 'Importado' : 'Se importaría'}:</b> ${x.productos} productos, ${x.insumos} insumos, ${x.recetas} renglones de receta,
-    ${x.producciones} producciones, ${x.ventas} ventas (${fmt(x.totalVentas)}), ${x.gastos} egresos (${fmt(x.totalGastos)}), ${x.clientes} clientes, ${x.ajustes} ajustes de stock.</div>
-    ${!hecho && r.baseVacia === false ? '<div class="alert bad">La app ya tiene datos: la importación solo se hace con la base vacía.</div>' : ''}
-    <h3 class="sub">Lo que encontré en la planilla (${r.avisos.length})</h3>
-    ${[...grupos].map(([s, ts]) => `<details${ts.length < 6 ? ' open' : ''}><summary><b>${esc(s)}</b> (${ts.length})</summary><ul>${ts.map(t => `<li class="hint">${esc(t)}</li>`).join('')}</ul></details>`).join('')}`;
-}
-async function runImport() {
-  if (!confirm('¿Importar los datos de la planilla vieja a la app? Las pestañas viejas no se tocan.')) return;
-  const r = await api('POST', '/api/importar');
-  mostrarImport(r, true);
-  $('imp-run').disabled = true;
-  toast('Importación terminada.');
 }
 
 /* ================= eventos ================= */
@@ -1183,8 +1269,8 @@ document.addEventListener('click', async e => {
   const d = t.dataset;
   const segDe = id => t.parentElement && t.parentElement.id === id;
   if (d.tab) return showTab(d.tab);
-  if (d.goto) { if (d.dm) dmVista = d.dm; return showTab(d.goto); }
-  if (d.mes) { inicioMes = moverMes(inicioMes, Number(d.mes)); return render(); }
+  if (d.goto) { if (d.dm) dmVista = d.dm; if (d.st) stVista = d.st; return showTab(d.goto); }
+  if (t.id === 'migracion-ok') { migracionInfo = null; return render(); }
   if (d.vmes) { ventasMes = moverMes(ventasMes, Number(d.vmes)); $('ventas-pend').checked = false; return render(); }
   if (d.omes) { oiMes = moverMes(oiMes, Number(d.omes)); return render(); }
   if (d.gmes) { gastosMes = moverMes(gastosMes, Number(d.gmes)); return render(); }
@@ -1193,6 +1279,10 @@ document.addEventListener('click', async e => {
   if (segDe('pn-seg')) { pnVista = d.v; return render(); }
   if (segDe('pc-chips')) { pcVista = d.v; return render(); }
   if (segDe('dm-seg')) { dmVista = d.v; return render(); }
+  if (segDe('st-seg')) { stVista = d.v; return render(); }
+  if (d.quitarg !== undefined) { gastoItems.splice(Number(d.quitarg), 1); return renderGastoItems(); }
+  if (d.ajustarins) { $('ai-ins').value = d.ajustarins; $('ai-cant').focus(); $('ai-panel').scrollIntoView({ behavior: 'smooth' }); return; }
+  if (d.borrarai) return del('¿Borrar este ajuste de insumo?', '/api/ajustes-insumo/' + d.borrarai);
   if (segDe('v-estado')) { ventaEstado = d.v; return renderVentaForm(); }
   // ventas
   if (d.quitar !== undefined) { ventaItems.splice(Number(d.quitar), 1); if (!ventaItems.length) ventaItems.push(nuevoRenglon()); return renderVentaForm(); }
@@ -1270,10 +1360,10 @@ $('v-items').addEventListener('input', e => {
   if (f === 'precioUnit') it.precioTocado = true;
   // total y subtotal sin redibujar (para no perder el foco)
   $('v-total').textContent = fmt(Calc.sum(ventaItems, x => (x.cantidad || 0) * (x.precioUnit || 0)));
+  // se actualiza el texto del renglón en el lugar: redibujar haría perder el foco del próximo campo
   const sub = row.querySelector('.sub');
-  if (sub) sub.innerHTML = sub.innerHTML.replace(/Subtotal [^<]*$/, 'Subtotal ' + fmt((it.cantidad || 0) * (it.precioUnit || 0)));
+  if (sub) sub.innerHTML = subVenta(it);
 });
-$('v-items').addEventListener('change', e => { if (e.target.dataset.f === 'cantidad') renderVentaForm(); });
 $('v-cliente').addEventListener('input', () => {
   ventaItems.forEach(it => { if (!it.precioTocado && it.productoId) it.precioUnit = precioPara(C.idx.productos.get(it.productoId)); });
   renderVentaForm();
@@ -1284,12 +1374,31 @@ $('v-guardar').addEventListener('click', e => guardando(e.target, guardarVenta))
 $('v-cancelar').addEventListener('click', resetVentaForm);
 $('ventas-mes').addEventListener('change', e => { if (e.target.value) { ventasMes = e.target.value; $('ventas-pend').checked = false; render(); } });
 $('ventas-pend').addEventListener('change', render);
-$('inicio-mes').addEventListener('change', e => { if (e.target.value) { inicioMes = e.target.value; render(); } });
 $('oi-guardar').addEventListener('click', e => guardando(e.target, guardarOi));
 $('oi-cancelar').addEventListener('click', resetOiForm);
 $('oi-mes').addEventListener('change', e => { if (e.target.value) { oiMes = e.target.value; render(); } });
 
 $('g-guardar').addEventListener('click', e => guardando(e.target, guardarGasto));
+$('g-add').addEventListener('click', () => { gastoItems.push({ insumoId: '', cantidad: null, precioUnit: null }); renderGastoItems(); });
+$('g-items').addEventListener('input', e => {
+  const row = e.target.closest('.item');
+  if (!row) return;
+  const it = gastoItems[Number(row.dataset.i)];
+  const f = e.target.dataset.f;
+  if (f === 'insumoId') {
+    it.insumoId = e.target.value;
+    const ins = C.idx.insumos.get(it.insumoId);
+    it.precioUnit = ins ? ins.costo : null;
+    return renderGastoItems();
+  }
+  it[f] = e.target.value.trim() === '' ? null : Number(e.target.value.replace(',', '.'));
+  const conItems = gastoItems.filter(x => x.insumoId);
+  const total = Calc.sum(conItems, x => (x.cantidad || 0) * (x.precioUnit || 0));
+  $('g-monto').value = Calc.round2(total);
+  $('g-items-total').textContent = `Total de la compra: ${fmt(total)} (es el monto del egreso).`;
+  const sub = row.querySelector('.sub');
+  if (sub) sub.innerHTML = subCompra(it);
+});
 $('g-cancelar').addEventListener('click', resetGastoForm);
 $('gastos-mes').addEventListener('change', e => { if (e.target.value) { gastosMes = e.target.value; render(); } });
 
@@ -1303,6 +1412,24 @@ $('s-conteo-btn').addEventListener('click', () => { modoConteo = true; render();
 $('s-conteo-cancelar').addEventListener('click', () => { modoConteo = false; render(); });
 $('s-conteo-guardar').addEventListener('click', e => guardando(e.target, guardarConteo));
 $('a-guardar').addEventListener('click', e => guardando(e.target, guardarAjuste));
+$('si-todos').addEventListener('change', render);
+$('si-conteo-btn').addEventListener('click', () => { modoConteoIns = true; render(); });
+$('si-conteo-cancelar').addEventListener('click', () => { modoConteoIns = false; render(); });
+$('si-conteo-guardar').addEventListener('click', e => guardando(e.target, guardarConteoIns));
+$('tbl-si').addEventListener('change', e => {
+  const id = e.target.dataset.minins;
+  if (!id) return;
+  const v = e.target.value.trim() === '' ? null : Number(e.target.value.replace(',', '.'));
+  api('PUT', '/api/insumos/' + id, { stockMinimo: v }).then(() => toast('Mínimo guardado.')).catch(() => {});
+});
+$('ai-guardar').addEventListener('click', e => guardando(e.target, async () => {
+  const body = { fecha: $('ai-fecha').value, insumoId: $('ai-ins').value, cantidad: numVal('ai-cant'), motivo: $('ai-motivo').value };
+  if (!body.insumoId) return toast('Elegí el insumo.', true);
+  if (!body.cantidad) return toast('Poné la cantidad (negativa si sale del stock).', true);
+  await api('POST', '/api/ajustes-insumo', body);
+  $('ai-cant').value = '';
+  toast('Ajuste guardado.');
+}));
 
 // Panel
 $('pn-periodo').addEventListener('change', render);
@@ -1389,8 +1516,6 @@ $('cat-guardar').addEventListener('click', e => guardando(e.target, async () => 
   $('cat-nombre').value = '';
   toast('Categoría agregada.');
 }));
-$('imp-preview').addEventListener('click', e => guardando(e.target, previewImport));
-$('imp-run').addEventListener('click', e => guardando(e.target, runImport));
 
 $('login-btn').addEventListener('click', login);
 $('login-ver').addEventListener('change', e => { $('login-pass').type = e.target.checked ? 'text' : 'password'; });
@@ -1399,8 +1524,8 @@ $('logout').addEventListener('click', async () => { await fetch('/api/logout', {
 
 [$('v-medio'), $('g-medio'), $('oi-medio')].forEach(sel => fillSelect(sel, MEDIOS, '—'));
 
-try { tabActual = localStorage.getItem('kasa-tab') || 'inicio'; } catch { /* sin storage */ }
-if (!RENDER[tabActual]) tabActual = 'inicio';
+try { tabActual = localStorage.getItem('kasa-tab') || 'panel'; } catch { /* sin storage */ }
+if (!RENDER[tabActual]) tabActual = 'panel';
 document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabActual));
 document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tabActual));
 start();

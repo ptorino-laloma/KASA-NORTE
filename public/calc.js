@@ -181,6 +181,56 @@
     return m;
   }
 
+  /* ---------- stock de insumos ---------- */
+
+  // Insumos que consume producir 'cantidad' de un producto con su receta actual:
+  // tandas (= cantidad / rinde) × cantidad de cada renglón. null si no hay receta o rinde.
+  function consumoDe(state, productoId, cantidad, cache) {
+    const idx = cache || indices(state);
+    const p = idx.productos.get(productoId);
+    const lineas = idx.recetasPorProducto.get(productoId) || [];
+    if (!p || !(p.rinde > 0) || !lineas.length) return null;
+    const tandas = cantidad / p.rinde;
+    return lineas.map(l => ({ insumoId: l.insumoId, cantidad: round2(tandas * l.cantidad * 1000) / 1000 }));
+  }
+
+  // Stock de insumos = comprado (detalle de egresos) − consumido (producciones) + ajustes.
+  // Solo cuenta lo cargado en la app: la planilla vieja no tenía compras por insumo,
+  // así que se arranca con un conteo.
+  function stockInsumos(state, hasta) {
+    const m = new Map();
+    const get = id => {
+      if (!m.has(id)) m.set(id, { comprado: 0, consumido: 0, ajustado: 0, stock: 0 });
+      return m.get(id);
+    };
+    state.insumos.forEach(i => get(i.id));
+    const ok = f => !hasta || f <= hasta;
+    const fechaGasto = new Map(state.gastos.map(g => [g.id, g.fecha]));
+    (state.compraItems || []).forEach(i => { const f = fechaGasto.get(i.gastoId); if (f !== undefined && ok(f)) get(i.insumoId).comprado += i.cantidad; });
+    state.producciones.forEach(p => { if (ok(p.fecha) && p.consumo) p.consumo.forEach(c => { get(c.insumoId).consumido += c.cantidad; }); });
+    (state.ajustesInsumo || []).forEach(a => { if (ok(a.fecha)) get(a.insumoId).ajustado += a.cantidad; });
+    m.forEach(s => {
+      ['comprado', 'consumido', 'ajustado'].forEach(k => { s[k] = round2(s[k] * 1000) / 1000; });
+      s.stock = round2((s.comprado - s.consumido + s.ajustado) * 1000) / 1000;
+    });
+    return m;
+  }
+
+  // Valor del stock de productos terminados al costo actual y a precio de venta
+  // (lo que dejaría si se vendiera todo). Solo stock positivo.
+  function valorStock(state) {
+    const st = stock(state), costos = costosTodos(state);
+    let costo = 0, venta = 0, ventaConCosto = 0;
+    state.productos.forEach(p => {
+      const q = st.get(p.id).stock;
+      if (!(q > 0)) return;
+      const cu = costos.get(p.id).costoUnit;
+      if (p.precio > 0) venta += q * p.precio;
+      if (cu !== null) { costo += q * cu; if (p.precio > 0) ventaConCosto += q * p.precio; }
+    });
+    return { costo, venta, gananciaPotencial: ventaConCosto - costo };
+  }
+
   /* ---------- resultados ---------- */
 
   function grupoDe(state, categoria) {
@@ -403,7 +453,7 @@
 
   const api = {
     sum, round2, byId, groupBy, indices, rangoMes, rangoAnio, enRango, finMes, sumarMeses, rangoAnterior, rangoAnioAnterior,
-    ventasFilas, agrupar, costosProduccion, tendencia, familiaSugerida,
+    ventasFilas, agrupar, costosProduccion, tendencia, familiaSugerida, consumoDe, stockInsumos, valorStock,
     costoProducto, costosTodos, precioSugerido, margen, productosQueUsan,
     stock, grupoDe, resumen, porProducto, porCliente, porMes
   };

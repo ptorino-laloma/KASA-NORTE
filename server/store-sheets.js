@@ -22,6 +22,7 @@ const num = v => (v === '' || v === null || v === undefined) ? 0 : Number(v);
 const optNum = v => (v === '' || v === null || v === undefined) ? null : Number(v);
 const str = v => (v === null || v === undefined) ? '' : String(v);
 const optStr = v => str(v) || null;
+const json = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
 
 // Nombre legible de un producto / insumo / cliente por id (columnas de ayuda para leer la planilla).
 const nameOf = (list, id) => (list.find(x => x.id === id) || {}).nombre || '';
@@ -31,11 +32,11 @@ const nameOf = (list, id) => (list.find(x => x.id === id) || {}).nombre || '';
 const SHEETS = {
   insumos: {
     title: 'App Insumos',
-    headers: ['id', 'nombre', 'unidad', 'costo', 'actualizado', 'notas', 'familia'],
-    toRows: s => s.insumos.map(i => [i.id, i.nombre, i.unidad || '', i.costo ?? '', i.actualizado || '', i.notas || '', i.familia || '']),
+    headers: ['id', 'nombre', 'unidad', 'costo', 'actualizado', 'notas', 'familia', 'stock_minimo'],
+    toRows: s => s.insumos.map(i => [i.id, i.nombre, i.unidad || '', i.costo ?? '', i.actualizado || '', i.notas || '', i.familia || '', i.stockMinimo ?? '']),
     fromRows: rows => rows.filter(r => r[0]).map(r => ({
       id: str(r[0]), nombre: str(r[1]), unidad: optStr(r[2]), costo: optNum(r[3]), actualizado: optStr(r[4]), notas: optStr(r[5]),
-      familia: optStr(r[6])
+      familia: optStr(r[6]), stockMinimo: optNum(r[7])
     }))
   },
   productos: {
@@ -57,12 +58,14 @@ const SHEETS = {
   },
   producciones: {
     title: 'App Produccion',
-    headers: ['id', 'fecha', 'producto_id', 'producto', 'cantidad', 'costo_unitario', 'nota', 'creado'],
+    // consumo: [{insumoId, cantidad}] que la producción descontó del stock de insumos (JSON).
+    // Vacío en lo importado de la planilla vieja: eso no mueve el stock de insumos.
+    headers: ['id', 'fecha', 'producto_id', 'producto', 'cantidad', 'costo_unitario', 'nota', 'creado', 'consumo'],
     toRows: s => s.producciones.map(p => [p.id, p.fecha, p.productoId, nameOf(s.productos, p.productoId), p.cantidad,
-      p.costoUnit ?? '', p.nota || '', p.creado || '']),
+      p.costoUnit ?? '', p.nota || '', p.creado || '', p.consumo ? JSON.stringify(p.consumo) : '']),
     fromRows: rows => rows.filter(r => r[0]).map(r => ({
       id: str(r[0]), fecha: str(r[1]), productoId: str(r[2]), cantidad: num(r[4]), costoUnit: optNum(r[5]),
-      nota: optStr(r[6]), creado: str(r[7])
+      nota: optStr(r[6]), creado: str(r[7]), consumo: json(r[8], null)
     }))
   },
   ventas: {
@@ -110,6 +113,20 @@ const SHEETS = {
     toRows: s => s.clientes.map(c => [c.id, c.nombre, c.tipo, c.telefono || '', c.notas || '']),
     fromRows: rows => rows.filter(r => r[0]).map(r => ({
       id: str(r[0]), nombre: str(r[1]), tipo: str(r[2]) || 'Particular', telefono: optStr(r[3]), notas: optStr(r[4])
+    }))
+  },
+  compraItems: {
+    title: 'App Compras Detalle',
+    headers: ['id', 'gasto_id', 'insumo_id', 'insumo', 'cantidad', 'precio_unitario'],
+    toRows: s => s.compraItems.map(i => [i.id, i.gastoId, i.insumoId, nameOf(s.insumos, i.insumoId), i.cantidad, i.precioUnit]),
+    fromRows: rows => rows.filter(r => r[0]).map(r => ({ id: str(r[0]), gastoId: str(r[1]), insumoId: str(r[2]), cantidad: num(r[4]), precioUnit: num(r[5]) }))
+  },
+  ajustesInsumo: {
+    title: 'App Ajustes Insumos',
+    headers: ['id', 'fecha', 'insumo_id', 'insumo', 'cantidad', 'motivo', 'nota', 'creado'],
+    toRows: s => s.ajustesInsumo.map(a => [a.id, a.fecha, a.insumoId, nameOf(s.insumos, a.insumoId), a.cantidad, a.motivo, a.nota || '', a.creado || '']),
+    fromRows: rows => rows.filter(r => r[0]).map(r => ({
+      id: str(r[0]), fecha: str(r[1]), insumoId: str(r[2]), cantidad: num(r[4]), motivo: str(r[5]), nota: optStr(r[6]), creado: str(r[7])
     }))
   },
   familias: {
